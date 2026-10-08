@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using UnityEngine;
 using NWH.VehiclePhysics2;
 namespace ApocaDustStorm
@@ -8,6 +9,9 @@ namespace ApocaDustStorm
     {
         private static readonly RaycastHit[] hits = new RaycastHit[32];
         private static readonly Vector3[] sides = { Vector3.forward, new Vector3(0, 0, -1), new Vector3(1, 0, 0), new Vector3(-1, 0, 0) };
+        private sealed class Structure { internal Transform Parent; internal bool Solid, Known; internal float Until; }
+        private static readonly Dictionary<Collider, Structure> structures = new Dictionary<Collider, Structure>();
+        internal static void Reset() { structures.Clear(); }
         internal static bool Descendant(Transform child, Transform ancestor)
         { for (; child != null; child = child.parent) if (child == ancestor) return true; return false; }
         private static bool Contains(string name, string word) { return name.IndexOf(word, StringComparison.OrdinalIgnoreCase) >= 0; }
@@ -16,7 +20,21 @@ namespace ApocaDustStorm
             known = false;
             if (collider == null || !collider.enabled || collider.isTrigger || Descendant(collider.transform, actor)) return false;
             if (collider.attachedRigidbody != null && !collider.attachedRigidbody.isKinematic) return false;
-            for (Transform t = collider.transform; t != null; t = t.parent)
+            Structure cached;
+            if (structures.TryGetValue(collider, out cached) && cached.Parent == collider.transform.parent && Time.unscaledTime < cached.Until)
+            { known = cached.Known; return cached.Solid; }
+            bool solid = Classify(collider.transform, actor, out known);
+            // Bound references and periodically reclassify movable/modded hierarchies.
+            if (structures.Count >= 2048) structures.Clear();
+            if (cached == null) cached = new Structure();
+            cached.Parent = collider.transform.parent; cached.Solid = solid; cached.Known = known; cached.Until = Time.unscaledTime + 5;
+            structures[collider] = cached;
+            return solid;
+        }
+        private static bool Classify(Transform root, Transform actor, out bool known)
+        {
+            known = false;
+            for (Transform t = root; t != null; t = t.parent)
             {
                 string name = t.name;
                 if (t == actor || t.GetComponent<VehicleController>() != null || t.Find("DriveTrigger") != null ||

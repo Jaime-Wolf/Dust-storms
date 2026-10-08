@@ -11,6 +11,8 @@ namespace ApocaDustStorm
         private static PlayMakerFSM health, inCar, sleepFsm;
         private static FsmFloat amount;
         private static float nextShelterScan;
+        private static float lastShelterScan;
+        private static bool checkingShelter;
         private static Vector3 shelterPosition;
         private static bool suspended;
         internal static bool Sheltered, InVehicle;
@@ -45,14 +47,26 @@ namespace ApocaDustStorm
             bool wasInVehicle = InVehicle;
             InVehicle = inCar != null && inCar.ActiveStateName == "InCar";
             Vector3 position = player.transform.position;
-            // Moving across a shelter boundary or leaving a cab must not reuse stale cover.
-            if (Time.unscaledTime >= nextShelterScan || skipped || wasInVehicle != InVehicle ||
-                (position - shelterPosition).sqrMagnitude > 0.000001f)
-            { nextShelterScan = Time.unscaledTime + 0.25f; shelterPosition = position; Sheltered = StormShelter.ContainsActor(player); }
+            bool storm = StormRunner.Model.Active || StormHazardModel.Severity(strength) > 0.001;
+            bool needsShelter = storm || cover.Protection < VehicleProtectionModel.InitialProtection - 0.000001;
+            if (needsShelter)
+            {
+                // Ordinary movement never bypasses the timer, including at driving speed.
+                // Cab transitions, clock jumps and teleports invalidate cover immediately.
+                float moved = (position - shelterPosition).sqrMagnitude;
+                bool forced = !checkingShelter || skipped || wasInVehicle != InVehicle || moved > 10000;
+                if (forced || Time.unscaledTime >= nextShelterScan)
+                {
+                    lastShelterScan = Time.unscaledTime; nextShelterScan = lastShelterScan + (storm ? 0.25f : 1);
+                    shelterPosition = position; Sheltered = StormShelter.ContainsActor(player);
+                }
+                checkingShelter = true;
+            }
+            else { checkingShelter = false; Sheltered = false; nextShelterScan = 0; }
             if (Sleeping)
             {
                 wasSleeping = true;
-                StormSleep.Interrupt(sleepFsm, strength);
+                if (!Sheltered) StormSleep.Interrupt(sleepFsm, strength);
                 return;
             }
             bool interrupted = StormSleep.ConsumeWake(player);
@@ -70,7 +84,9 @@ namespace ApocaDustStorm
         internal static void AdvanceShelteredSleep(double elapsed)
         {
             if (!Plugin.Active || !Ready || !Sleeping || Apocasetter.GameMenu.Paused || Time.timeScale <= 0 ||
-                Double.IsNaN(elapsed) || Double.IsInfinity(elapsed) || elapsed <= 0 || !StormShelter.ContainsActor(player)) return;
+                Double.IsNaN(elapsed) || Double.IsInfinity(elapsed) || elapsed <= 0 ||
+                cover.Protection >= VehicleProtectionModel.InitialProtection - 0.000001 ||
+                (elapsed <= 2 ? !Sheltered : !StormShelter.ContainsActor(player))) return;
             // Safe native sleep can restore cab cover. No health accounting or wake penalty.
             double remaining = Math.Min(elapsed, 120);
             while (remaining > 0) { double step = Math.Min(remaining, 0.2); cover.Step(step, false, true, false); remaining -= step; }
@@ -80,7 +96,7 @@ namespace ApocaDustStorm
             if (!Plugin.Active || !Ready || Sheltered || InVehicle || Apocasetter.GameMenu.Paused || Time.timeScale <= 0) return 1;
             return (float)StormHazardModel.MovementGain(strength, gust, Plugin.Value(Plugin.Gusts, 1), Plugin.Value(Plugin.MovementResistance, 1));
         }
-        internal static void Suspend() { suspended = true; nextShelterScan = 0; }
+        internal static void Suspend() { suspended = true; checkingShelter = false; nextShelterScan = 0; }
         internal static void Reset() { Suspend(); cover.Reset(); wasSleeping = false; shelterPosition = Vector3.zero; Sheltered = false; InVehicle = false; player = null; health = null; inCar = null; sleepFsm = null; amount = null; }
     }
 }

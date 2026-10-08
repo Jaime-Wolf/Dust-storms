@@ -29,6 +29,15 @@ namespace ApocaDustStorm
             directional = found.ToArray();
             headlights = vehicleSpots.ToArray();
         }
+        internal static void RefreshHeadlights(Transform vehicle)
+        {
+            if (vehicle == null) return;
+            List<Light> spots = new List<Light>();
+            if (headlights != null) foreach (Light light in headlights) if (light != null) spots.Add(light);
+            foreach (Light light in vehicle.GetComponentsInChildren<Light>(true))
+                if (light != null && light.type == LightType.Spot && !spots.Contains(light) && IsVehicleSpot(light)) spots.Add(light);
+            headlights = spots.ToArray();
+        }
         internal static bool Recover(bool calm)
         {
             // Never bake the temporary dusty sky, or overwrite a live camera
@@ -58,29 +67,30 @@ namespace ApocaDustStorm
 
         internal sealed class Snapshot
         {
-            private readonly Light[] lights;
-            private readonly float[] intensities;
-            private readonly Light[] spots;
-            private readonly float[] spotIntensities, spotRanges;
-            private readonly float ambientIntensity;
-            private readonly Color ambient, sky, equator, ground;
-            private readonly Material skybox;
-            private readonly Color[] colors;
-            private readonly float[] floats;
-            private readonly bool[] hasColors, hasFloats;
-            private readonly Vector4 weatherSky, enviroLight;
-            internal Snapshot()
+            private Light[] lights, spots;
+            private float[] intensities, spotIntensities, spotRanges;
+            private float ambientIntensity;
+            private Color ambient, sky, equator, ground;
+            private Material skybox;
+            private readonly Color[] colors = new Color[skyColors.Length];
+            private readonly float[] floats = new float[skyFloats.Length];
+            private readonly bool[] hasColors = new bool[skyColors.Length], hasFloats = new bool[skyFloats.Length];
+            private Vector4 weatherSky, enviroLight;
+            internal Snapshot() { Capture(); }
+            internal void Capture()
             {
                 if (directional == null) Scan();
-                lights = directional; intensities = new float[lights.Length];
-                spots = headlights; spotIntensities = new float[spots.Length]; spotRanges = new float[spots.Length];
+                lights = directional;
+                if (intensities == null || intensities.Length != lights.Length) intensities = new float[lights.Length];
+                spots = headlights;
+                if (spotIntensities == null || spotIntensities.Length != spots.Length)
+                { spotIntensities = new float[spots.Length]; spotRanges = new float[spots.Length]; }
                 for (int i = 0; i < spots.Length; i++) if (spots[i] != null)
                 { spotIntensities[i] = spots[i].intensity; spotRanges[i] = spots[i].range; }
                 ambientIntensity = RenderSettings.ambientIntensity; ambient = RenderSettings.ambientLight;
                 sky = RenderSettings.ambientSkyColor; equator = RenderSettings.ambientEquatorColor; ground = RenderSettings.ambientGroundColor;
                 skybox = RenderSettings.skybox;
-                colors = new Color[skyColors.Length]; floats = new float[skyFloats.Length];
-                hasColors = new bool[colors.Length]; hasFloats = new bool[floats.Length];
+                Array.Clear(hasColors, 0, hasColors.Length); Array.Clear(hasFloats, 0, hasFloats.Length);
                 weatherSky = Shader.GetGlobalVector("_weatherSkyMod"); enviroLight = Shader.GetGlobalVector("_EnviroLighting");
                 for (int i = 0; i < lights.Length; i++)
                     if (lights[i] != null) intensities[i] = lights[i].intensity;

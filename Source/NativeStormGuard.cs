@@ -61,6 +61,8 @@ namespace ApocaDustStorm
             }
         }
         internal static bool StormsDisabled() { return disableFsm != null && disableFsm.enabled; }
+        internal static void Observe(PlayMakerFSM fsm)
+        { if (fsm != null && fsm.FsmName == "DisableSandstorm" && fsm.gameObject.name == "__GameManager__") disableFsm = fsm; }
         internal static void Restore()
         {
             foreach (Collider c in colliders) if (c != null && !c.enabled) c.enabled = true;
@@ -86,6 +88,7 @@ namespace ApocaDustStorm
     {
         private static bool Prefix(PlayMakerFSM __instance)
         {
+            NativeStormGuard.Observe(__instance);
             if (!NativeStormGuard.Hazard(__instance)) return true;
             NativeStormGuard.Suppress(NativeStormGuard.Root(__instance.transform));
             return false;

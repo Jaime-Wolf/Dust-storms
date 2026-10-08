@@ -109,9 +109,10 @@ namespace ApocaDustStorm
             internal readonly float[] Floats = new float[floatKeys.Length];
             internal readonly Color[] Colors = new Color[colorKeys.Length];
             internal readonly bool[] HasFloats = new bool[floatKeys.Length], HasColors = new bool[colorKeys.Length];
-            internal MaterialState(Material material)
+            internal void Capture(Material material)
             {
                 Material = material;
+                Array.Clear(HasFloats, 0, HasFloats.Length); Array.Clear(HasColors, 0, HasColors.Length);
                 for (int i = 0; i < floatKeys.Length; i++) if (material.HasProperty(floatKeys[i]))
                 { HasFloats[i] = true; Floats[i] = material.GetFloat(floatKeys[i]); }
                 for (int i = 0; i < colorKeys.Length; i++) if (material.HasProperty(colorKeys[i]))
@@ -134,22 +135,27 @@ namespace ApocaDustStorm
         {
             private readonly float[] floats = new float[floatKeys.Length];
             private readonly Vector4[] colors = new Vector4[colorKeys.Length];
-            private readonly MaterialState[] materials;
-            internal Snapshot(Material imageMaterial)
+            private readonly List<Material> list = new List<Material>();
+            private readonly List<MaterialState> materials = new List<MaterialState>();
+            private int count;
+            internal Snapshot(Material imageMaterial) { Capture(imageMaterial); }
+            internal void Capture(Material imageMaterial)
             {
                 if (cached == null) Scan();
-                List<Material> list = new List<Material>(); foreach (Material material in cached) Add(list, material);
+                list.Clear(); foreach (Material material in cached) Add(list, material);
                 Add(list, RenderSettings.skybox); Add(list, imageMaterial);
                 AzureFogScattering effect = StormRunner.View == null ? null : StormRunner.View.GetComponent<AzureFogScattering>();
                 if (effect != null) Add(list, effect.fogScatteringMaterial);
-                materials = new MaterialState[list.Count];
-                for (int i = 0; i < list.Count; i++) materials[i] = new MaterialState(list[i]);
+                count = list.Count;
+                while (materials.Count < count) materials.Add(new MaterialState());
+                for (int i = 0; i < count; i++) materials[i].Capture(list[i]);
+                for (int i = count; i < materials.Count; i++) materials[i].Material = null;
                 for (int i = 0; i < floats.Length; i++) floats[i] = Shader.GetGlobalFloat(floatKeys[i]);
                 for (int i = 0; i < colors.Length; i++) colors[i] = Shader.GetGlobalVector(colorKeys[i]);
             }
             internal void Apply(float strength)
             {
-                foreach (MaterialState material in materials) material.Apply(strength);
+                for (int i = 0; i < count; i++) materials[i].Apply(strength);
                 for (int i = 0; i < floats.Length; i++) Shader.SetGlobalFloat(floatKeys[i], ChangeFloat(i, floats[i], strength));
                 for (int i = 0; i < colors.Length; i++)
                 {
@@ -159,7 +165,7 @@ namespace ApocaDustStorm
             }
             internal void Restore()
             {
-                foreach (MaterialState material in materials) material.Restore();
+                for (int i = 0; i < count; i++) materials[i].Restore();
                 for (int i = 0; i < floats.Length; i++) Shader.SetGlobalFloat(floatKeys[i], floats[i]);
                 for (int i = 0; i < colors.Length; i++) Shader.SetGlobalVector(colorKeys[i], colors[i]);
             }

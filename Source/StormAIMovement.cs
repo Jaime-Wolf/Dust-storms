@@ -9,17 +9,32 @@ namespace ApocaDustStorm
 {
     internal static class StormAIMovement
     {
-        private sealed class Actor { internal bool Eligible, Sheltered; internal float NextScan; }
+        private sealed class Actor { internal GameObject Owner; internal bool Eligible, Sheltered, Queued, Scanned; internal float NextScan, Phase; }
         private static readonly Dictionary<GameObject, Actor> actors = new Dictionary<GameObject, Actor>();
         private static readonly List<GameObject> removed = new List<GameObject>();
+        private static readonly Queue<Actor> pending = new Queue<Actor>();
+        private static int scanFrame = -1, scansThisFrame, sequence;
         private static float nextPrune;
         private static FieldInfo idleAgent, agentTransform;
         internal static bool NpcBridgeInstalled;
-        internal static void Reset() { actors.Clear(); removed.Clear(); nextPrune = 0; }
+        internal static void Reset() { actors.Clear(); removed.Clear(); pending.Clear(); nextPrune = 0; scanFrame = -1; scansThisFrame = sequence = 0; }
+        private static bool Active()
+        { return StormRunner.Strength > 0.35f && Plugin.Active && StormRunner.CanRender && !Apocasetter.GameMenu.Paused && Time.timeScale > 0 && Plugin.Value(Plugin.MovementResistance, 1) > 0; }
+        private static void ScanPending()
+        {
+            if (scanFrame != Time.frameCount) { scanFrame = Time.frameCount; scansThisFrame = 0; }
+            // FIFO prevents a busy early-updating NPC from starving other actors.
+            while (pending.Count > 0 && scansThisFrame < 2)
+            {
+                Actor actor = pending.Dequeue(); actor.Queued = false;
+                if (actor.Owner == null) continue;
+                actor.Sheltered = StormShelter.ContainsActor(actor.Owner); actor.Scanned = true;
+                actor.NextScan = Time.unscaledTime + 0.75f + actor.Phase; scansThisFrame++;
+            }
+        }
         internal static float Gain(GameObject owner)
         {
-            if (!Plugin.Active || !StormRunner.CanRender || owner == null || owner == PlayerStormHazards.Player ||
-                owner.name == "Player" || Apocasetter.GameMenu.Paused || Time.timeScale <= 0 || StormRunner.Strength <= 0.35f) return 1;
+            if (!Active() || owner == null || owner == PlayerStormHazards.Player) return 1;
             if (Time.unscaledTime >= nextPrune)
             {
                 nextPrune = Time.unscaledTime + 5; removed.Clear();
@@ -30,24 +45,24 @@ namespace ApocaDustStorm
             if (!actors.TryGetValue(owner, out actor))
             {
                 bool health = false, detection = false, attack = false, rotate = false, bodypart = false;
-                foreach (PlayMakerFSM fsm in owner.GetComponents<PlayMakerFSM>())
+                if (owner.name != "Player") foreach (PlayMakerFSM fsm in owner.GetComponents<PlayMakerFSM>())
                 { if (fsm.FsmName == "Health") health = true; if (fsm.FsmName == "Detection") detection = true; if (fsm.FsmName == "Attack") attack = true; if (fsm.FsmName == "Rotate") rotate = true; if (fsm.FsmName == "Bodypart") bodypart = true; }
-                actor = new Actor { Eligible = health && ((detection && attack) || (rotate && bodypart)) }; actors[owner] = actor;
+                actor = new Actor { Owner = owner, Eligible = health && ((detection && attack) || (rotate && bodypart)), Phase = (sequence++ % 13) * (0.25f / 13) }; actors[owner] = actor;
             }
             if (!actor.Eligible) return 1;
-            if (Time.unscaledTime >= actor.NextScan)
-            { actor.NextScan = Time.unscaledTime + 0.75f; actor.Sheltered = StormShelter.ContainsActor(owner); }
-            return actor.Sheltered ? 1 : (float)StormHazardModel.MovementGain(StormRunner.Strength, StormRunner.Gust,
+            if (Time.unscaledTime >= actor.NextScan && !actor.Queued) { actor.Queued = true; pending.Enqueue(actor); }
+            ScanPending();
+            return !actor.Scanned || actor.Sheltered ? 1 : (float)StormHazardModel.MovementGain(StormRunner.Strength, StormRunner.Gust,
                 Plugin.Value(Plugin.Gusts, 1), Plugin.Value(Plugin.MovementResistance, 1));
         }
         internal static Vector3 FilterActionVelocity(Vector3 velocity, SetVelocity action)
         {
-            if (action == null || action.Fsm == null || action.Fsm.Name != "Movement") return velocity;
+            if (!Active() || action == null || action.Fsm == null || action.Fsm.Name != "Movement") return velocity;
             float gain = Gain(action.Owner); velocity.x *= gain; velocity.z *= gain; return velocity;
         }
         internal static Vector3 FilterIdleVelocity(Vector3 velocity, object controller)
         {
-            if (controller == null || idleAgent == null || agentTransform == null) return velocity;
+            if (!Active() || controller == null || idleAgent == null || agentTransform == null) return velocity;
             object agent = idleAgent.GetValue(controller);
             Transform transform = agent == null ? null : agentTransform.GetValue(agent) as Transform;
             float gain = Gain(transform == null ? null : transform.gameObject);

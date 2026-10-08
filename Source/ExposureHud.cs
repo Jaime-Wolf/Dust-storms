@@ -9,11 +9,14 @@ namespace ApocaDustStorm
         private static float edgeAmount;
         private static StormCover state;
         private static RectTransform compass;
-        private static float nextLookup;
+        private static Canvas canvas;
+        private static Transform compassParent;
+        private static float nextLookup, nextCanvasLookup;
         private static readonly Vector3[] corners = new Vector3[4];
         internal static void Tick(float dt, float strength)
         {
             state = PlayerStormHazards.State(strength);
+            if (state != StormCover.None) UpdateAnchor();
             float target = (float)ExposureHudMath.EdgeTarget(state, strength, PlayerStormHazards.VehicleProtection);
             if (dt > 0 && !float.IsNaN(dt) && !float.IsInfinity(dt))
                 edgeAmount = Mathf.Lerp(edgeAmount, target, 1 - Mathf.Exp(-Mathf.Min(dt, 0.2f) / 0.8f));
@@ -21,7 +24,7 @@ namespace ApocaDustStorm
         internal static void Hide() { state = StormCover.None; edgeAmount = 0; }
         internal static void Clear()
         {
-            Hide(); compass = null; nextLookup = 0;
+            Hide(); compass = null; canvas = null; compassParent = null; nextLookup = nextCanvasLookup = 0;
             foreach (Texture2D texture in new Texture2D[] { edges, shelter, vehicle, exposed })
                 if (texture != null) UnityEngine.Object.Destroy(texture);
             edges = shelter = vehicle = exposed = null;
@@ -83,18 +86,22 @@ namespace ApocaDustStorm
             }
             return Texture("Exposure" + mode, n, n, pixels);
         }
-        private static ExposureLayout Layout()
+        private static void UpdateAnchor()
         {
             if (compass == null && Time.unscaledTime >= nextLookup)
             {
                 nextLookup = Time.unscaledTime + 2;
                 GameObject native = GameObject.Find("Canvas/Compass") ?? GameObject.Find("Compass");
-                if (native != null) compass = native.GetComponent<RectTransform>();
+                if (native != null) { compass = native.GetComponent<RectTransform>(); nextCanvasLookup = 0; }
             }
+            if (compass != null && (compassParent != compass.parent || Time.unscaledTime >= nextCanvasLookup))
+            { canvas = compass.GetComponentInParent<Canvas>(); compassParent = compass.parent; nextCanvasLookup = Time.unscaledTime + 2; }
+        }
+        private static ExposureLayout Layout()
+        {
             float centre = Screen.width * 0.965f, top = Screen.height * 0.745f;
             if (compass != null && compass.gameObject.activeInHierarchy)
             {
-                Canvas canvas = compass.GetComponentInParent<Canvas>();
                 Camera camera = canvas == null || canvas.renderMode == RenderMode.ScreenSpaceOverlay ? null : canvas.worldCamera;
                 float left = float.PositiveInfinity, right = float.NegativeInfinity, nativeTop = float.PositiveInfinity;
                 compass.GetWorldCorners(corners);

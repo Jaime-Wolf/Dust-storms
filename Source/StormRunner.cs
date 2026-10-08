@@ -14,10 +14,11 @@ namespace ApocaDustStorm
         private static SandAudio sand;
         private static GameObject player;
         private static Camera view;
-        private static bool preview, inSession, scanned;
-        private static int scanPhase;
+        private static bool preview, inSession;
         private static float nextScan, nextWarning, noticeUntil;
         private static string notice;
+        private static GUIStyle noticeStyle;
+        private static GUISkin noticeSkin;
         private static readonly System.Random random = new System.Random();
         internal static Camera View { get { return view; } }
         internal static bool CanRender { get { return Plugin.Active && inSession && view != null; } }
@@ -35,18 +36,11 @@ namespace ApocaDustStorm
                 {
                     nextScan = Time.unscaledTime + 1;
                     if (player == null) player = GameObject.Find("Player");
-                    // Initialize once, then spread recurring scene searches over
-                    // separate frames instead of batching them every three seconds.
-                    if(!scanned){NativeStormGuard.Scan();StormLighting.Scan();AzureAtmosphere.Scan();NativeStormClock.Scan();scanned=true;}
-                    else if(scanPhase==0)NativeStormGuard.Scan();
-                    else if(scanPhase==1)StormLighting.Scan();
-                    else {AzureAtmosphere.Scan();NativeStormClock.Scan();}
-                    scanPhase=(scanPhase+1)%3;
                 }
+                StormDiscovery.EnsureScene();
                 view = SelectView();
+                StormDiscovery.BindVehicle(StormCameraCache.VehicleRoot);
                 if (player == null || view == null) { ExposureHud.Hide(); PlayerStormHazards.Suspend(); WindblownLizards.Suspend(); DustLightning.Suspend(); if (sand != null) sand.Silence(); if (audio != null) audio.Silence(); return; }
-                AzureAtmosphere.EnsureCamera(view);
-                StormDistanceFog.EnsureCamera(view);
                 bool playing = Time.timeScale > 0 && !Apocasetter.GameMenu.Paused;
 #if APOCA_DEV
                 bool input = playing && Application.isFocused && !Apocasetter.InputBlocker.Active;
@@ -103,25 +97,10 @@ namespace ApocaDustStorm
             }
         }
         private static Camera SelectView()
-        {
-            if (player != null)
-            {
-                for (Transform t = player.transform.parent; t != null; t = t.parent)
-                {
-                    Transform third = t.Find("DriveTrigger/3rdCamera");
-                    if (third == null) continue;
-                    Camera carCamera = third.GetComponentInChildren<Camera>(true);
-                    if (carCamera != null && carCamera.isActiveAndEnabled) return carCamera;
-                }
-            }
-            GameObject holder = GameObject.Find("PlayerCameraHolder");
-            Transform eye = holder == null ? null : holder.transform.Find("PlayerCamera");
-            Camera first = eye == null ? null : eye.GetComponent<Camera>();
-            if (first != null && first.isActiveAndEnabled) return first;
-            return Camera.main;
-        }
+        { return StormCameraCache.Select(player); }
         private static void Begin(bool test)
         {
+            StormDiscovery.StormStarted(); StormShelter.Reset(); StormAIMovement.Reset();
             Vector3 p = player.transform.position;
             double duration = StormModel.RollDuration(Plugin.Value(Plugin.MinimumDuration, 5), Plugin.Value(Plugin.MaximumDuration, 15), random.NextDouble());
             Model.BeginFrom(p.x, p.z, (WindFrom)random.Next(4), duration,
@@ -134,12 +113,13 @@ namespace ApocaDustStorm
         private static void Announce(string text) { notice = text; noticeUntil = Time.unscaledTime + 8; }
         internal static void ClearAll()
         {
-            DustLightning.Clear(); StormHorizon.Clear(); StormDistanceFog.Clear(); StormView.Clear(); StormFog.Restore(); StormLighting.Clear(Apocasetter.GameMenu.InGame); AzureAtmosphere.Clear(); NativeStormClock.Reset(); Model.Reset(); Strength = 0; Gust = 0; preview = false;
+            DustLightning.Clear(); StormHorizon.Clear(); StormDistanceFog.Clear(); StormView.Clear(); StormFog.Clear(); StormLighting.Clear(Apocasetter.GameMenu.InGame); AzureAtmosphere.Clear(); NativeStormClock.Reset(); Model.Reset(); Strength = 0; Gust = 0; preview = false;
             if (visuals != null) { visuals.Dispose(); visuals = null; }
             if (audio != null) { audio.Dispose(); audio = null; }
             if (sand != null) { sand.Dispose(); sand = null; }
             ExposureHud.Clear(); VehicleWind.Reset(); PlayerStormHazards.Reset(); StormSleep.Reset(); StormAIMovement.Reset(); WindblownLizards.Reset();
-            player = null; view = null; inSession = false; nextScan = 0; scanned=false; scanPhase=0;
+            StormDiscovery.Reset(); StormCameraCache.Clear(); StormShelter.Reset();
+            player = null; view = null; inSession = false; nextScan = 0; noticeStyle = null; noticeSkin = null;
             schedule.Reset(); noticeUntil = 0;
         }
         private void OnGUI()
@@ -152,7 +132,12 @@ namespace ApocaDustStorm
             if (label == null && preview && Model.Active) label = "DUST STORM TEST  |  " + Plugin.PreviewKey.Value + " TO CLEAR";
 #endif
             if (label == null) return;
-            GUIStyle style = new GUIStyle(GUI.skin.label); style.alignment = TextAnchor.MiddleCenter;
+            if (noticeStyle == null || noticeSkin != GUI.skin)
+            {
+                noticeSkin = GUI.skin; noticeStyle = new GUIStyle(GUI.skin.label);
+                noticeStyle.alignment = TextAnchor.MiddleCenter; noticeStyle.normal.textColor = new Color(0.87f, 0.77f, 0.57f);
+            }
+            GUIStyle style = noticeStyle;
             style.fontSize = Mathf.Clamp(Screen.height / 65, 14, 23); style.normal.textColor = new Color(0.87f, 0.77f, 0.57f);
             GUI.Label(new Rect(Screen.width * 0.2f, Screen.height * 0.1f, Screen.width * 0.6f, 45), label, style);
         }

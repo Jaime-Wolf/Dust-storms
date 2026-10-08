@@ -23,8 +23,10 @@ namespace ApocaDustStorm
             internal float NativeStart;
             internal StormLighting.Snapshot Lighting;
             internal AzureAtmosphere.Snapshot Azure;
+            internal bool LightingApplied, AzureApplied;
         }
         private static readonly Stack<Snapshot> stack = new Stack<Snapshot>();
+        private static readonly Stack<Snapshot> pool = new Stack<Snapshot>();
         internal static bool HasOverrides { get { return stack.Count > 0; } }
         internal static Color DustColour(Color native, float strength, float night)
         {
@@ -56,10 +58,12 @@ namespace ApocaDustStorm
         internal static bool Push(Camera camera, Material azureMaterial = null)
         {
             if (!StormRunner.CanRender || camera == null || camera != StormRunner.View || StormRunner.Strength < 0.001f) return false;
-            Snapshot s = new Snapshot { Camera = camera, Enabled = RenderSettings.fog, Mode = RenderSettings.fogMode,
-                Density = RenderSettings.fogDensity, Start = RenderSettings.fogStartDistance, End = RenderSettings.fogEndDistance,
-                Color = RenderSettings.fogColor, Weather = Shader.GetGlobalVector("_weatherFogMod"),
-                EnviroDistance = Shader.GetGlobalFloat("_distanceFogIntensity"), EnviroMax = Shader.GetGlobalFloat("_maximumFogDensity") };
+            Snapshot s = pool.Count > 0 ? pool.Pop() : new Snapshot();
+            s.Camera = camera; s.Enabled = RenderSettings.fog; s.Mode = RenderSettings.fogMode;
+            s.Density = RenderSettings.fogDensity; s.Start = RenderSettings.fogStartDistance; s.End = RenderSettings.fogEndDistance;
+            s.Color = RenderSettings.fogColor; s.Weather = Shader.GetGlobalVector("_weatherFogMod");
+            s.EnviroDistance = Shader.GetGlobalFloat("_distanceFogIntensity"); s.EnviroMax = Shader.GetGlobalFloat("_maximumFogDensity");
+            s.Settings = null; s.LightingApplied = s.AzureApplied = false;
             s.SceneParams = Shader.GetGlobalVector("_SceneFogParams"); s.SceneMode = Shader.GetGlobalVector("_SceneFogMode");
             s.HeightParams = Shader.GetGlobalVector("_HeightParams"); s.DistanceParams = Shader.GetGlobalVector("_DistanceParams");
             EnviroSkyLite sky = EnviroSkyLite.instance;
@@ -73,8 +77,12 @@ namespace ApocaDustStorm
             float strength = StormRunner.Strength;
             float blend = (float)StormModel.Smooth(strength);
             if (outer && (Plugin.Value(Plugin.Darkness, 1) > 0 || Plugin.Value(Plugin.Headlights, 1) > 0))
-            { s.Lighting = new StormLighting.Snapshot(); s.Lighting.Apply(strength); }
-            s.Azure = new AzureAtmosphere.Snapshot(azureMaterial); s.Azure.Apply(strength);
+            {
+                if (s.Lighting == null) s.Lighting = new StormLighting.Snapshot(); else s.Lighting.Capture();
+                s.LightingApplied = true; s.Lighting.Apply(strength);
+            }
+            if (s.Azure == null) s.Azure = new AzureAtmosphere.Snapshot(azureMaterial); else s.Azure.Capture(azureMaterial);
+            s.AzureApplied = true; s.Azure.Apply(strength);
             float gust = (float)StormRunner.Gust;
             float target = (float)(StormModel.FogDensity(strength * strength, Plugin.StormVisibility) * WindMath.Haze(gust, Plugin.Value(Plugin.Gusts, 1)));
             // Match the current native fog's attenuation at 100m before adding dust.
@@ -110,8 +118,8 @@ namespace ApocaDustStorm
         {
             if (stack.Count == 0) return;
             Snapshot s = stack.Pop();
-            if (s.Lighting != null) s.Lighting.Restore();
-            if (s.Azure != null) s.Azure.Restore();
+            if (s.LightingApplied) s.Lighting.Restore();
+            if (s.AzureApplied) s.Azure.Restore();
             if (s.Settings != null) s.Settings.startDistance = s.NativeStart;
             RenderSettings.fog = s.Enabled; RenderSettings.fogMode = s.Mode; RenderSettings.fogDensity = s.Density;
             RenderSettings.fogStartDistance = s.Start; RenderSettings.fogEndDistance = s.End; RenderSettings.fogColor = s.Color;
@@ -119,10 +127,12 @@ namespace ApocaDustStorm
             Shader.SetGlobalFloat("_maximumFogDensity", s.EnviroMax);
             Shader.SetGlobalVector("_SceneFogParams", s.SceneParams); Shader.SetGlobalVector("_SceneFogMode", s.SceneMode);
             Shader.SetGlobalVector("_HeightParams", s.HeightParams); Shader.SetGlobalVector("_DistanceParams", s.DistanceParams);
+            s.Camera = null; pool.Push(s);
         }
         internal static void PreCull(Camera camera) { StormView.Capture(camera); Push(camera); StormHorizon.PreCull(camera); DustLightning.PreCull(camera); WindblownLizards.PreCull(camera); }
         internal static void PostRender(Camera camera) { DustLightning.Hide(); StormHorizon.Hide(); if (stack.Count > 0 && stack.Peek().Camera == camera) Pop(); }
         internal static void Restore() { while (stack.Count > 0) Pop(); }
+        internal static void Clear() { Restore(); pool.Clear(); }
         internal static void FinishPass(bool pushed) { if (pushed) Pop(); }
     }
     // Enviro reads RenderSettings again during its image effect, after onPostRender.
