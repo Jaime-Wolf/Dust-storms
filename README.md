@@ -48,9 +48,9 @@ The 0.1.26 baseline passes **623 regression assertions**, static inspection of b
 
 ## Installation
 
-Players can use the existing [0.1.26 installation ZIP](ApocaDustStorm-0.1.26.zip). Close the game and extract into its root folder, merging BepInEx. The DLL belongs in `BepInEx/plugins/ApocaDustStorm/`. Keep source and verification files separate from player install ZIPs.
+This repository is for mod source and compatibility development. Player installation packages are distributed separately on Nexus Mods. Close the game before installing; the mod DLL belongs in `BepInEx/plugins/ApocaDustStorm/`. Keep source and verification files separate from player install ZIPs.
 
-The existing [Developer ZIP](ApocaDustStorm-0.1.26-Developer.zip) is source/verification material, not an installation package. The `-Development` build above creates the installable dev DLL.
+The `-Development` build above creates the installable dev DLL. `Source/` contains the mod's implementation; `Verification/` contains original test simulations and checking scripts. Game method names, settings and state names are referenced for integration, but the current source tree does not include game DLLs, decompiled game classes, extracted game assets or native inspection dumps.
 
 ## Credits
 
