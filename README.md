@@ -1,6 +1,12 @@
 # ApocaDustStorm
 
-Worldwide dust storms for **Apocalypter**, inspired by **Mad Max (2015)**. This repository shares the **0.1.26 source** so modders can inspect behavior, report conflicts and develop separate compatibility patches.
+Worldwide dust storms for **Apocalypter**, inspired by **Mad Max (2015)**. This repository shares the **0.1.27 source** so modders can inspect behavior, report conflicts and develop separate compatibility patches. Download the installable ZIP from [Releases](https://github.com/Jaime-Wolf/Dust-storms/releases).
+
+## Changes in 0.1.27
+
+Performance update: player shelter checks stay at four per second during storms, including while driving. Calm weather skips those queries unless worn vehicle protection needs shelter-only recovery, then checks once per second. Collider classification is cached, scene searches run once per scene and at storm start, and vehicle entry refreshes local headlights. Camera references, NPC eligibility, fog/lighting snapshots, the notice style and the compass Canvas are cached. NPC shelter checks are staggered with a shared limit of two checks per frame.
+
+Storm appearance, audio, hazard values and saved settings are retained. Ordinary shelter changes are detected within 0.25 seconds; cab changes, pause/clock jumps and large teleports refresh immediately. Automated checks passed; in-game performance and visual testing of this update is still pending.
 
 ## What the mod does
 
@@ -44,11 +50,11 @@ Release output: `Source/build/ApocaDustStorm.dll`. Dev output: `Source/build-dev
 & .\Verification\check-variants.ps1 -GameDir $game
 ```
 
-The 0.1.26 baseline passes **623 regression assertions**, static inspection of both variants and compiled release/dev checks. The preceding 0.1.25 gameplay was confirmed working by the author; the 0.1.26 change is the release/dev controls split. Automated checks do not simulate Unity GPU rendering or real PhysX. See [Verification/README.md](Verification/README.md).
+Version 0.1.27 passes **661 regression assertions**: 234 model, 402 simulated runtime and 25 controlled installed-Harmony assertions. Both variants pass native target inspections; 305 shared gameplay methods and embedded literal arrays match between release and dev. The new checks count expensive calls and verify cache/buffer reuse. They do not measure live FPS or simulate Unity GPU rendering or real PhysX. In-game performance testing is pending. See [Verification/README.md](Verification/README.md).
 
 ## Installation
 
-This repository is for mod source and compatibility development. Player installation packages are distributed separately on Nexus Mods. Close the game before installing; the mod DLL belongs in `BepInEx/plugins/ApocaDustStorm/`. Keep source and verification files separate from player install ZIPs.
+Download **ApocaDustStorm-0.1.27.zip** from [Releases](https://github.com/Jaime-Wolf/Dust-storms/releases/tag/v0.1.27). Close the game, then copy the ZIP's **ApocaDustStorm** folder into `BepInEx/plugins`, replacing the previous DLL. The final path is `BepInEx/plugins/ApocaDustStorm/ApocaDustStorm.dll`. Install only one release/dev variant. Source and verification files are separate from the player installation ZIP.
 
 The `-Development` build above creates the installable dev DLL. `Source/` contains the mod's implementation; `Verification/` contains original test simulations and checking scripts. Game method names, settings and state names are referenced for integration, but the current source tree does not include game DLLs, decompiled game classes, extracted game assets or native inspection dumps.
 
