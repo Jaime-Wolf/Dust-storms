@@ -1,0 +1,25 @@
+ApocaDustStorm 0.1.27 - October 8, 2026
+Performance update; storm appearance, audio levels, hazard tuning and configuration defaults retained.
+234 model assertions passed.
+402 simulated runtime assertions passed, including 38 new call-count/cache/buffer-reuse assertions.
+25 real-Harmony integration assertions passed against the installed loader library and controlled native/NPCAI-shaped fixtures.
+661 total regression assertions. Compiled variant/native inspections are recorded separately.
+Release and development DLLs compiled successfully against installed game/loader/Apocasetter references.
+Both DLLs passed all eleven native Harmony target and two optional installed NPCAI target inspections.
+Release has no preview fields, bindings, test HUD or test-key input calls. Dev retains F8/N.
+305 shared gameplay method bodies and embedded literal arrays match between release/dev.
+Simulated counters: 600 moving calm frames with unworn cover = zero player shelter raycasts.
+Simulated counters: 60 driving frames at 60 m/s = four shelter queries / 20 rays in one second outdoors.
+Routine movement never bypasses the timer. Cab transitions, pause/clock skips and 100m+ teleports force a fresh query.
+Calm checks occur only for worn vehicle-protection recovery, at one Hz; shelter-only recovery retained.
+Collider classification reused for five seconds, immediate parent changes invalidate; trigger/rigidbody/own-actor checks remain live. Cache bounded to 2048 entries, cleared on scene/storm start.
+Simulated counters: 1000 calm NPC updates = zero owner-name reads and zero shelter raycasts.
+Simulated counters: 60 NPCs share at most two shelter checks per render frame, with FIFO fairness and staggered recurring deadlines.
+Simulated counters: 1000 warmed on-foot/driving view selections = no additional Find calls.
+Scene discovery once per scene and on storm start; entry into a vehicle refreshes its local headlights. No periodic full-scene queries in calm weather.
+Simulated counters: 100 fog draws reuse snapshots, lighting arrays and Azure buffers/material slots while recapturing and restoring current native values; nested ownership retained.
+Simulated counters: 100 HUD repaint events = no Canvas parent queries; reparenting refreshes the anchor.
+Storm notice GUIStyle is cached; refreshed only if GUI skin changes.
+Preserved ImageEffectOpaque fog pass, native ambient probe ownership, next-frame override cleanup and one guarded post-storm GI refresh.
+Tests do not measure live FPS or simulate Unity GPU rendering/PhysX; actual first/chase camera driving, shelter, lighting and performance retest pending.
+No game installation, live-config edits, other-mod edits or external publication performed.

@@ -76,6 +76,7 @@ namespace ApocaDustStorm
             DistanceFogChecks(camera,menu);
             HazardRuntimeChecks.Run(Check);
             ExposureRuntimeChecks.Run(Check);
+            PerformanceRuntimeChecks.Run(Check);
             Console.WriteLine(count+" simulated storm guard, fog, lighting, collision and vehicle-wind checks passed. Unity rendering/PhysX are not simulated.");
         }
         private static void DistanceFogChecks(Camera camera,Camera menu)

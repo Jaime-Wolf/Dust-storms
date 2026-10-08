@@ -87,10 +87,12 @@ namespace ApocaDustStorm
             for (int i = 0; i < 700; i++) PlayerStormHazards.Tick(player, 0.1f, 1, false);
             check(hp.Value == before && PlayerStormHazards.Sheltered && PlayerStormHazards.State(1) == StormCover.Shelter && PlayerStormHazards.MovementGain(1, 1) == 1, "Shelter immediately stops damage and movement resistance and reports SHELTERED");
             Physics.RaycastFixture = null; player.transform.position += Vector3.forward * 0.02f;
+            Time.unscaledTime += 0.25f;
             PlayerStormHazards.Tick(player, 0.1f, 1, false);
-            check(!PlayerStormHazards.Sheltered && Math.Abs(before - hp.Value - 0.03f) < 0.0001 && PlayerStormHazards.State(1) == StormCover.Exposed, "Walking beyond shelter refreshes cover on the same frame without waiting for the stationary cache");
+            check(!PlayerStormHazards.Sheltered && Math.Abs(before - hp.Value - 0.03f) < 0.0001 && PlayerStormHazards.State(1) == StormCover.Exposed, "Leaving shelter is detected at the next quarter-second check without an exposure grace timer");
             Physics.RaycastFixture = delegate(Vector3 origin, Vector3 direction, float distance) { return direction.y > 0.5f ? new RaycastHit[] { new RaycastHit { collider = roof, distance = 4 } } : new RaycastHit[0]; };
             player.transform.position -= Vector3.forward * 0.02f; before = hp.Value;
+            Time.unscaledTime += 0.25f;
             PlayerStormHazards.Tick(player, 0.1f, 1, false);
             check(hp.Value == before && PlayerStormHazards.State(1) == StormCover.Shelter, "Walking back into shelter immediately stops damage");
             inCar.ActiveStateName = "InCar"; PlayerStormHazards.Tick(player, 0.1f, 1, false);
@@ -98,11 +100,11 @@ namespace ApocaDustStorm
             Physics.RaycastFixture = null; inCar.ActiveStateName = "OnFoot"; PlayerStormHazards.Tick(player, 0.1f, 1, false);
             check(Math.Abs(before - hp.Value - 0.03f) < 0.0001 && !PlayerStormHazards.Sheltered && PlayerStormHazards.State(1) == StormCover.Exposed, "Exiting a vehicle rechecks geometry immediately even if actor position did not change");
             Physics.RaycastFixture = delegate(Vector3 origin, Vector3 direction, float distance) { return direction.y > 0.5f ? new RaycastHit[] { new RaycastHit { collider = roof, distance = 4 } } : new RaycastHit[0]; };
-            cave.name = "tree_big"; check(!StormShelter.ContainsActor(player), "Tree canopy does not count as full shelter");
-            cave.name = "car_wreck_roof"; check(!StormShelter.ContainsActor(player), "Wreck panels cannot masquerade as a building roof");
+            cave.name = "tree_big"; Time.unscaledTime += 5; check(!StormShelter.ContainsActor(player), "Tree canopy does not count as full shelter after classification expiry");
+            cave.name = "car_wreck_roof"; Time.unscaledTime += 5; check(!StormShelter.ContainsActor(player), "Wreck panels cannot masquerade as a building roof");
             cave.name = "building"; roof.isTrigger = true; check(!StormShelter.ContainsActor(player), "Trigger volumes are excluded from shelter"); roof.isTrigger = false;
             roof.attachedRigidbody = cave.Add<Rigidbody>(); check(!StormShelter.ContainsActor(player), "Loose physics objects cannot provide full shelter"); roof.attachedRigidbody = null;
-            cave.Add<NWH.VehiclePhysics2.VehicleController>(); check(!StormShelter.ContainsActor(player), "An intact vehicle roof is excluded from full structural shelter");
+            cave.Add<NWH.VehiclePhysics2.VehicleController>(); Time.unscaledTime += 5; check(!StormShelter.ContainsActor(player), "An intact vehicle roof is excluded from full structural shelter");
             GameObject unnamed = new GameObject("Imported shelter mesh"); Collider mesh = unnamed.Add<SphereCollider>();
             Physics.RaycastFixture = delegate(Vector3 origin, Vector3 direction, float distance) { return new RaycastHit[] { new RaycastHit { collider = mesh, distance = 3 } }; };
             check(StormShelter.ContainsActor(player), "Unnamed/modded roof and two walls also provide shelter");

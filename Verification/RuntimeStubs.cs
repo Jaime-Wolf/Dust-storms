@@ -21,20 +21,22 @@ namespace UnityEngine
     public class Object
     {
         public static readonly List<Object> All = new List<Object>();
+        public static int SceneQueries;
         public Object() { All.Add(this); }
         public static T Instantiate<T>(T prefab,Vector3 position,Quaternion rotation) where T:Object
         {GameObject original=prefab as GameObject;GameObject clone=new GameObject(original.name);clone.transform.position=position;clone.transform.rotation=rotation;clone.Add<Rigidbody>();foreach(PlayMakerFSM fsm in original.GetComponents<PlayMakerFSM>()){PlayMakerFSM copy=clone.Add<PlayMakerFSM>();copy.FsmName=fsm.FsmName;copy.ActiveStateName=fsm.ActiveStateName;}return clone as T;}
         public bool Destroyed;public static void Destroy(Object value){value.Destroyed=true;All.Remove(value);}
-        public static T[] FindObjectsOfType<T>() where T : Object { return All.FindAll(x => x is T).ConvertAll(x => (T)x).ToArray(); }
+        public static T[] FindObjectsOfType<T>() where T : Object { SceneQueries++; return All.FindAll(x => x is T).ConvertAll(x => (T)x).ToArray(); }
         public static T FindObjectOfType<T>() where T : Object { T[] all=FindObjectsOfType<T>();return all.Length>0?all[0]:null; }
     }
     public class Component : Object
     {
+        public static int ParentLookups;
         public GameObject gameObject; public Transform transform { get { return gameObject.transform; } }
         public T GetComponent<T>() where T : Component { return gameObject.GetComponent<T>(); }
         public T[] GetComponentsInChildren<T>(bool inactive) where T : Component { return gameObject.GetComponentsInChildren<T>(inactive); }
         public T GetComponentInChildren<T>(bool inactive) where T : Component { T[] all=GetComponentsInChildren<T>(inactive);return all.Length>0?all[0]:null; }
-        public T GetComponentInParent<T>() where T : Component { for(Transform t=transform;t!=null;t=t.parent){T found=t.GetComponent<T>();if(found!=null)return found;}return null; }
+        public T GetComponentInParent<T>() where T : Component { ParentLookups++; for(Transform t=transform;t!=null;t=t.parent){T found=t.GetComponent<T>();if(found!=null)return found;}return null; }
         public string name {get{return gameObject.name;}}
     }
     public class Behaviour : Component { public bool enabled = true; public bool isActiveAndEnabled {get{return enabled&&gameObject.activeInHierarchy;}} }
@@ -43,6 +45,7 @@ namespace UnityEngine
     [Flags] public enum DepthTextureMode {None=0,Depth=1,DepthNormals=2}
     public class Camera : Behaviour
     {
+        public static Camera main;
         public DepthTextureMode depthTextureMode;public float farClipPlane=3000,fieldOfView=60,aspect=1.6f;public int cullingMask=-1;
         public bool UseRenderedPose;public Vector3 RenderedPosition,RenderedForward=Vector3.forward;
         private Vector3 Forward{get{return (UseRenderedPose?RenderedForward:transform.forward).normalized;}}
@@ -134,8 +137,9 @@ namespace UnityEngine
     public struct RaycastHit {public Collider collider;public float distance;public Vector3 normal,point;}
     public static class Physics
     {
+        public static int Raycasts;
         public static Func<Vector3,Vector3,float,RaycastHit[]> RaycastFixture;
-        public static int RaycastNonAlloc(Vector3 origin,Vector3 direction,RaycastHit[] hits,float distance,int layer,QueryTriggerInteraction query){RaycastHit[] found=RaycastFixture==null?new RaycastHit[0]:RaycastFixture(origin,direction,distance);Array.Copy(found,hits,Math.Min(found.Length,hits.Length));return Math.Min(found.Length,hits.Length);}
+        public static int RaycastNonAlloc(Vector3 origin,Vector3 direction,RaycastHit[] hits,float distance,int layer,QueryTriggerInteraction query){Raycasts++;RaycastHit[] found=RaycastFixture==null?new RaycastHit[0]:RaycastFixture(origin,direction,distance);Array.Copy(found,hits,Math.Min(found.Length,hits.Length));return Math.Min(found.Length,hits.Length);}
         public static int SphereCastNonAlloc(Vector3 p,float r,Vector3 direction,RaycastHit[] hits,float distance,int layer,QueryTriggerInteraction query){return 0;}
         public static int OverlapSphereNonAlloc(Vector3 p,float r,Collider[] results,int layer,QueryTriggerInteraction query){return 0;}
         public static bool ComputePenetration(Collider a,Vector3 ap,Quaternion ar,Collider b,Vector3 bp,Quaternion br,out Vector3 normal,out float depth){normal=Vector3.zero;depth=0;return false;}
@@ -162,19 +166,20 @@ namespace UnityEngine
     }
     public class Transform : Component
     {
+        public static int Finds;
         public Transform parent; public Vector3 position,up=Vector3.up,localScale=Vector3.one,forward=Vector3.forward;public Quaternion rotation;
         public void SetParent(Transform t,bool stay){parent=t;}
         public Vector3 TransformVector(Vector3 value){Vector3 right=Vector3.Cross(up,forward).normalized;return right*value.x+up*value.y+forward*value.z;}
-        public Transform Find(string name){foreach(Object obj in Object.All){Transform t=obj as Transform;if(t!=null&&t.parent==this&&t.name==name)return t;}return null;}
+        public Transform Find(string name){Finds++;foreach(Object obj in Object.All){Transform t=obj as Transform;if(t!=null&&t.parent==this&&t.name==name)return t;}return null;}
         public T[] GetComponents<T>() where T : Component { return gameObject.GetComponents<T>(); }
     }
     public class GameObject : Object
     {
         public bool activeInHierarchy=true;public void SetActive(bool value){activeInHierarchy=value;}
-        public string name;public HideFlags hideFlags; public Transform transform; public List<Component> Components = new List<Component>();
+        private string instanceName;public static int Finds,NameReads;public string name{get{NameReads++;return instanceName;}set{instanceName=value;}}public HideFlags hideFlags; public Transform transform; public List<Component> Components = new List<Component>();
         public bool IsPrefab;public UnityEngine.SceneManagement.Scene scene{get{return new UnityEngine.SceneManagement.Scene{Valid=!IsPrefab};}}
         public GameObject(string n) { name=n; transform=new Transform {gameObject=this}; Components.Add(transform); }
-        public static GameObject Find(string name){foreach(Object obj in Object.All){GameObject go=obj as GameObject;if(go!=null&&go.name==name&&!go.Destroyed&&go.activeInHierarchy)return go;}return null;}
+        public static GameObject Find(string name){Finds++;foreach(Object obj in Object.All){GameObject go=obj as GameObject;if(go!=null&&go.name==name&&!go.Destroyed&&go.activeInHierarchy)return go;}return null;}
         public T Add<T>() where T : Component,new() { T c=new T {gameObject=this}; Components.Add(c); return c; }
         public T AddComponent<T>() where T : Component,new() {return Add<T>();}
         public T GetComponent<T>() where T : Component { return Components.Find(x=>x is T&&!x.Destroyed) as T; }
