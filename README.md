@@ -1,63 +1,74 @@
-# ApocaDustStorm
+# ApocaDustStorm 0.1.28
 
-Worldwide dust storms for **Apocalypter**, inspired by **Mad Max (2015)**. This repository shares the **0.1.27 source** so modders can inspect behavior, report conflicts and develop separate compatibility patches. Download the installable ZIP from [Releases](https://github.com/Jaime-Wolf/Dust-storms/releases).
+Thick worldwide dust storms inspired by Mad Max (2015), with a gradual approach and clearing, changing directional wind, low visibility and overcast lighting. Includes blowing ground dust, colliding twigs and sticks, gentle vehicle buffeting, sand-on-metal audio, branching dust lightning and occasional edible windblown lizards.
+
+## Changes in 0.1.28
+
+A brief yellow pulse on the game's existing HEALTH label and number makes actual storm health loss easier to notice. The pulse lasts 0.6 seconds and repeats at most once every two seconds during sustained damage, then restores native colors. It uses the existing Exposure indicators setting; setting it to zero hides the pulse along with the other indicators. No new HUD panel or sound. Damage, shelter, vehicle protection and storm tuning are unchanged.
+
+Both variants compile against the installed game libraries; 680 automated assertions and native/variant inspections pass. The new pulse's visibility needs an in-game test.
 
 ## Changes in 0.1.27
 
-Performance update: player shelter checks stay at four per second during storms, including while driving. Calm weather skips those queries unless worn vehicle protection needs shelter-only recovery, then checks once per second. Collider classification is cached, scene searches run once per scene and at storm start, and vehicle entry refreshes local headlights. Camera references, NPC eligibility, fog/lighting snapshots, the notice style and the compass Canvas are cached. NPC shelter checks are staggered with a shared limit of two checks per frame.
+Performance update: player shelter checks now keep their four-per-second cadence while driving, collider classification is cached, and full-protection calm weather skips shelter queries. Worn vehicle protection still recovers only in proper shelter, using one check per second after clearing. Ordinary shelter entry/exit is detected within 0.25 seconds; cab transitions, pause/clock jumps and large teleports refresh immediately.
 
-Storm appearance, audio, hazard values and saved settings are retained. Ordinary shelter changes are detected within 0.25 seconds; cab changes, pause/clock jumps and large teleports refresh immediately. Automated checks passed; in-game performance and visual testing of this update is still pending.
+Weather assets are discovered once per scene and refreshed at storm start. Camera references, NPC eligibility, rendering snapshots and the compass Canvas are cached. NPC shelter checks share a small per-frame budget. Storm appearance, audio, damage values, protection settings and other effect tuning are retained.
 
-## What the mod does
+Both variants build and pass 661 automated regression assertions, native compatibility inspection and release/dev checks. Live performance and visual testing of this update is still pending.
 
-Chance-based day/night storms last 5-15 minutes by default, approach and clear gradually, and use a changing compass wind direction. Dense distant haze, moving ground dust, overcast lighting, colliding sticks, wind and sand-on-metal audio, gentle vehicle buffeting, branching dust lightning and occasional edible windblown lizards build the atmosphere.
+## Storm hazards
 
-Hazardous dust damages exposed players immediately. Buildings, caves and conex containers provide shelter. Vehicles start at 90% protection and fall to 25% over five minutes in hazardous dust; proper shelter gradually restores it. Exiting/re-entering does not reset protection. Wind slows player and AI movement, but AI never receive storm health damage. Exposed sleep is interrupted without an added sleep/wake health penalty. Dusty screen edges and an icon above the compass show exposure, vehicle cover or shelter.
+- Strong wind slows the player and AI. AI never receive storm health damage.
+- Exposed players take damage immediately. Caves, buildings and conex containers provide shelter and stop damage.
+- Actual storm health loss briefly flashes the existing health label and number yellow, no more than once every two seconds.
+- A vehicle initially provides 90% protection, falling gradually to 25% after five minutes in hazardous dust. Proper shelter restores protection gradually; exiting and re-entering a vehicle does not reset it.
+- Dusty screen edges and a small icon above the compass show exposure, vehicle cover or shelter. Active storms interrupt exposed sleep, including in vehicles, without a sleep or wake health penalty. Sleeping in proper shelter works normally.
+- Gusts apply modest horizontal pressure to the driven vehicle. The storm does not lift vehicles, suck off parts or directly damage vehicle parts. Dust lightning adds light and sound without strike damage.
 
-Settings are available through Apocasetter's MODS menu. All thirteen Effects sliders default to 1.00. Automatic storms are independent of the vanilla Dust Storm Off switch by default. There is no telemetry or networking in the mod.
+## Installation and updating
+
+Requires BepInEx 5 x64 and Apocasetter. Built against the installed Apocasetter 2.0.9; the dependency is not bundled.
+
+1. Close Apocalypter.
+2. Copy the ZIP's ApocaDustStorm folder into BepInEx/plugins in the Apocalypter game folder, merging the existing mod folder. The DLL belongs at BepInEx/plugins/ApocaDustStorm/ApocaDustStorm.dll.
+3. Start the game and adjust the mod through Apocasetter's MODS menu.
+
+Existing settings are retained in BepInEx/config/local.apocalypter.duststorm.cfg. Replace the previous storm DLL when updating; keep only one copy. The gearbox and chase-camera mods remain separate.
+
+## Settings and timing
+
+Automatic storms can arrive in daytime or at night. Defaults are a random 5-15 minutes of normal play, with a 90-second build-up and 75-second clearing, adjusted for shorter storms. After five minutes of calm weather, each eligible minute has a 6% chance of starting a storm. An arrival is not guaranteed immediately after loading.
+
+Storms use a random north, south, east or west wind with directional variation. Storm appearance, chance, duration, wind, debris, audio, lightning, headlights, vehicle buffeting, movement resistance, player damage and indicators are adjustable. All thirteen Effects sliders default to 1.00; your saved choices are preserved. Set Player exposure damage to 0 for no health damage; exposed sleep is still interrupted.
+
+The mod's automatic storms operate independently of the vanilla Dust Storm Off switch by default, so vanilla storms may remain off. Enable Follow vanilla storm switch if you want that option to also disable this mod's automatic storms.
+
+## Release and development builds
+
+This release has no storm or lightning testing hotkeys. Normal automatic weather remains available.
+
+ApocaDustStorm-0.1.28-Dev.zip is a separate installable development variant with the testing controls. Install either the release or dev variant, replacing the same DLL; never install both together. Both use the same plugin identity and settings file. Old preview-key values may remain in the config but cannot trigger the release.
+
+ApocaDustStorm-0.1.28-Developer.zip contains source and verification material only. It is not an installation package. Both installable ZIPs contain only the DLL and README files.
+
+## Compatibility and credits
+
+Works with the separate ApocaChaseCamera 0.1.5. The optional NPCAI movement adapter was checked against the installed NPCAI 1.2.0; AI health remains untouched. Unusual versions or other weather/rendering mods may need a compatibility test.
+
+Storm atmosphere inspired by Mad Max (2015). Thanks to Sawyer, creator of Apocalypter. Native wind and food assets are loaded from the installed game and are not redistributed. This mod adds no telemetry or network requests.
+
+## Changes in 0.1.26
+
+The release compiles out the storm/lightning testing key handlers and their settings. The dev build retains F8 and N. Show test status becomes Show storm notices, preserving the previous preference. Gameplay and effect tuning from the user-tested 0.1.25 build are retained, including first-person fog and post-storm lighting recovery.
+
+Archive layout: the repackaged installation ZIP opens directly to the mod's folder. Copy that folder into BepInEx/plugins. For an older ZIP that opens to a BepInEx folder, merge that folder into the game folder instead. Source and verification files are supplied separately.
+
+
 
 ## For other modders
 
-Start with [COMPATIBILITY.md](COMPATIBILITY.md), which identifies the relevant source files, native Harmony targets, camera/rendering lifecycle and the existing optional AI/camera adapters. Read the [reuse permissions](LICENSE.md) before using or distributing code.
+This repository shares the 0.1.28 original mod source and focused verification fixtures. Download the installation ZIP from [Releases](https://github.com/Jaime-Wolf/Dust-storms/releases/tag/v0.1.28).
 
-- Separate compatibility patches that depend on the original mod are allowed.
-- Copying code into another mod, bundling this mod, redistributing a modified version or reuploading it requires permission from **Jaime-Wolf**.
-- Source visibility does not grant general reuse or redistribution permission.
-- Use Issues for compatibility reports and Pull requests for proposed changes to this repository.
+See [COMPATIBILITY.md](COMPATIBILITY.md) for integration details and [LICENSE.md](LICENSE.md) for reuse permissions. Separate compatibility patches are allowed; copying code into another mod, bundling or reuploading this mod, or distributing modified versions requires permission from Jaime-Wolf. Source visibility does not grant general reuse permission.
 
-## Requirements and build
-
-**Runtime:** BepInEx 5 x64 and Apocasetter. The saved build was compiled against Unity 2020.3.49f1, Apocasetter 2.0.9 and the installed game assemblies. NPCAI is optional; its adapter was checked against version 1.2.0. ApocaChaseCamera 0.1.5 remains a separate optional mod.
-
-**Build:** Windows with the .NET Framework compiler and a local Apocalypter installation containing the dependencies. Game/Unity/NWH/PlayMaker/BepInEx/Apocasetter binaries are not included in the source folders.
-
-```powershell
-# Set this to your own game installation.
-$game = 'D:\Steam\steamapps\common\Apocalypter'
-& .\Source\build.ps1 -GameDir $game
-& .\Source\build.ps1 -GameDir $game -Development
-```
-
-Release output: `Source/build/ApocaDustStorm.dll`. Dev output: `Source/build-dev/ApocaDustStorm.dll`. The dev build defines `APOCA_DEV` and retains **F8** for storm start/clear and **N** for lightning preview. Release compiles out those testing handlers and settings. Install only one variant: they share `local.apocalypter.duststorm`, the same DLL path and config file.
-
-## Validation
-
-```powershell
-& .\Verification\test.ps1
-& .\Verification\harmony-compat.ps1 -GameDir $game
-& .\Verification\inspect-build.ps1 -GameDir $game
-& .\Verification\inspect-build.ps1 -GameDir $game -PluginPath .\Source\build-dev\ApocaDustStorm.dll
-& .\Verification\check-variants.ps1 -GameDir $game
-```
-
-Version 0.1.27 passes **661 regression assertions**: 234 model, 402 simulated runtime and 25 controlled installed-Harmony assertions. Both variants pass native target inspections; 305 shared gameplay methods and embedded literal arrays match between release and dev. The new checks count expensive calls and verify cache/buffer reuse. They do not measure live FPS or simulate Unity GPU rendering or real PhysX. In-game performance testing is pending. See [Verification/README.md](Verification/README.md).
-
-## Installation
-
-Download **ApocaDustStorm-0.1.27.zip** from [Releases](https://github.com/Jaime-Wolf/Dust-storms/releases/tag/v0.1.27). Close the game, then copy the ZIP's **ApocaDustStorm** folder into `BepInEx/plugins`, replacing the previous DLL. The final path is `BepInEx/plugins/ApocaDustStorm/ApocaDustStorm.dll`. Install only one release/dev variant. Source and verification files are separate from the player installation ZIP.
-
-The `-Development` build above creates the installable dev DLL. `Source/` contains the mod's implementation; `Verification/` contains original test simulations and checking scripts. Game method names, settings and state names are referenced for integration, but the current source tree does not include game DLLs, decompiled game classes, extracted game assets or native inspection dumps.
-
-## Credits
-
-Storm atmosphere inspired by **Mad Max (2015)**. Thanks to **Sawyer**, creator of Apocalypter. Native assets are loaded from the installed game; no game assets or dependency assemblies are redistributed by the source folders.
+Build with Source/build.ps1 (release) or Source/build.ps1 -Development (dev), using your installed game dependencies. Run Verification/test.ps1 and Verification/harmony-compat.ps1 for regressions; Verification/inspect-build.ps1 and Verification/check-variants.ps1 inspect compiled variants. No game binaries, decompiled game classes, extracted assets or native inspection dumps are included in this repository.
