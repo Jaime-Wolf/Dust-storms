@@ -1,0 +1,2 @@
+234 storm lifecycle, scheduling, directional wind and dust-flow checks passed.
+470 simulated storm guard, fog, lighting, collision and vehicle-wind checks passed. Unity rendering/PhysX are not simulated.

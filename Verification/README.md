@@ -1,3 +1,22 @@
+# ApocaDustStorm 0.1.29 verification
+
+Prepared October 9, 2026. Adds covered boat POI hulls to structural shelter. The old blanket wreck-name exclusion rejected the native shipwreck_* geometry and its Wreck_* ancestors. The exception now follows only the actual hull collider hierarchy; unrelated car wrecks, POI props and vegetation are still excluded. Existing structural probes, cadence, collider cache, exposure/sleep/recovery rules and effects are retained.
+
+- Release and dev compile against the installed game libraries without compiler warnings.
+- 234 model assertions, 470 simulated runtime assertions and 25 controlled installed-Harmony assertions pass: 729 total. The Harmony fixture compilation emits its existing unassigned test-double-field warning; production compilation does not.
+- 49 boat assertions cover 28 observed native prefab collider paths, runtime clone wrappers, cached classification, player damage and movement protection, cab under cover, exposure on exit, open decks, lone hull walls, unrelated props, triggers, disabled/dynamic collision, actor ownership, driveable vehicles and case-insensitive naming.
+- The new boat regression fails against the original 0.1.28 StormShelter at its first covered native hull, and passes with this fix. The cache check performs 200 repeated queries without new hierarchy name reads or Transform.Find calls.
+- Release/dev inspection passes: testing hotkeys remain absent from release and present in dev, and all 316 shared gameplay methods are identical between variants.
+- Full native compatibility inspection does NOT pass with the currently installed optional NPCAI: it reports "Optional NPCAI command layout changed." The original 0.1.28 binary reproduces the same failure, and StormAIMovement.cs is unchanged. This is a separate compatibility issue; controlled Harmony fixtures do not prove compatibility with that installed version. No claim of a fully passing native inspection is made.
+
+Evidence: Verification/0.1.29-check-results.txt, 0.1.29-harmony.txt, 0.1.29-native-release.txt, 0.1.29-native-dev.txt and 0.1.29-variants.txt. Native metadata research and baseline failure logs stay in the active workspace work/dust-boat-shelter-0.1.29 folder. No native assets or game code are distributed.
+
+The boat geometry tests simulate ray hits; actual Unity mesh collision and in-game roof coverage still need testing. Enter a covered boat interior during hazardous dust and check the shelter icon and stopped damage; step onto an open deck/outside and confirm exposure returns within the usual quarter-second cadence.
+
+Player and installable dev ZIPs contain only ApocaDustStorm/ApocaDustStorm.dll and README.md. The separate Developer ZIP contains source/verification and licensing, without binaries. Local 0.1.28 baseline and previous archives are retained. Version 0.1.29 is the boat-shelter release. Live installation and boat coverage still need user testing.
+
+## Historical 0.1.28 verification notes
+
 # ApocaDustStorm 0.1.28 verification
 
 Prepared October 8, 2026. Adds only a short yellow pulse to the native player health label/number after actual storm health loss. It lasts 0.6 seconds, has a two-second trigger interval and uses the existing Exposure indicators setting. Native health values, exposure rate, shelter, sleep and protection rules are retained.
@@ -50,3 +69,4 @@ The saved 0.1.26 project baseline is backed up before promotion. Previous releas
 ## In-game retest
 
 Check clear-weather movement/driving, storm driving in first/chase view, view switching and vehicle transitions, shelter entry/exit, protection recovery after clearing, exposed/sheltered sleep, a group of NPCs, pause/scene reload, and day/night lighting after the storm. Compare frame times in the same scene and camera, with the same other mods, against 0.1.26.
+

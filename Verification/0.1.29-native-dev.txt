@@ -1,0 +1,10 @@
+Native and added Enviro fog both use ImageEffectOpaque; original source retained; explicit fog pass0 checked.
+No ambient-probe setter in plugin; one guarded recovery GI call; next-frame override cleanup and LateUpdate recovery checked.
+Optional NPCAI command layout changed
+At <mod-project>\Verification\inspect-build.ps1:79 char:42
++ ... signments.Count -ne 1){throw 'Optional NPCAI command layout changed'}
++                            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : OperationStopped: (Optional NPCAI command layout changed:String) [], RuntimeException
+    + FullyQualifiedErrorId : Optional NPCAI command layout changed
+ 
+

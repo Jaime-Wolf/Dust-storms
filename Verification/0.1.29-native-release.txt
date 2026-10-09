@@ -1,0 +1,4 @@
+Native and added Enviro fog both use ImageEffectOpaque; original source retained; explicit fog pass0 checked.
+No ambient-probe setter in plugin; one guarded recovery GI call; next-frame override cleanup and LateUpdate recovery checked.
+
+FAILED: Optional NPCAI command layout changed (inspect-build.ps1 line 79). Same failure reproduced against original 0.1.28 binary. Full native compatibility inspection is not passing.
