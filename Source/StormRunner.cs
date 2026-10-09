@@ -145,6 +145,7 @@ namespace ApocaDustStorm
         private void LateUpdate()
         {
             if (inSession) StormLighting.Recover(!Model.Active && Strength == 0);
+            StormHealthFlash.Tick();
         }
         private void FixedUpdate()
         {

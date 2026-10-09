@@ -79,7 +79,12 @@ namespace ApocaDustStorm
                 cover.Step(dt, hazardous, Sheltered, InVehicle);
                 damage = (float)StormHazardModel.Damage(dt, strength, Sheltered, InVehicle, Plugin.Value(Plugin.ExposureDamage, 1), cover.Protection);
             }
-            if (damage > 0) amount.Value = Mathf.Max(0, amount.Value - damage);
+            if (damage > 0)
+            {
+                float before = amount.Value;
+                amount.Value = Mathf.Max(0, before - damage);
+                if (amount.Value < before) StormHealthFlash.DamageTaken();
+            }
         }
         internal static void AdvanceShelteredSleep(double elapsed)
         {
@@ -96,7 +101,7 @@ namespace ApocaDustStorm
             if (!Plugin.Active || !Ready || Sheltered || InVehicle || Apocasetter.GameMenu.Paused || Time.timeScale <= 0) return 1;
             return (float)StormHazardModel.MovementGain(strength, gust, Plugin.Value(Plugin.Gusts, 1), Plugin.Value(Plugin.MovementResistance, 1));
         }
-        internal static void Suspend() { suspended = true; checkingShelter = false; nextShelterScan = 0; }
+        internal static void Suspend() { suspended = true; checkingShelter = false; nextShelterScan = 0; StormHealthFlash.Clear(); }
         internal static void Reset() { Suspend(); cover.Reset(); wasSleeping = false; shelterPosition = Vector3.zero; Sheltered = false; InVehicle = false; player = null; health = null; inCar = null; sleepFsm = null; amount = null; }
     }
 }

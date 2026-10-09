@@ -1,6 +1,8 @@
-# ApocaDustStorm 0.1.27 - development build
+# ApocaDustStorm 0.1.28 - development build
 
 Installable development variant of the same worldwide dust-storm mod. It retains the gameplay and effect tuning of the release, with testing controls enabled:
+
+Version 0.1.28 adds a 0.6-second yellow pulse on the existing health label and number after actual storm health loss, at most once every two seconds. It uses Exposure indicators and preserves native HUD colors. Both variants have the same pulse; its visibility still needs an in-game test.
 
 - F8 starts a gradually approaching test storm; press again to clear it over 30 seconds.
 - N previews dust lightning during visible dust when Dust lightning is enabled. A short playback cooldown applies.
