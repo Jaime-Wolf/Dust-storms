@@ -1,0 +1,4 @@
+Native and added Enviro fog both use ImageEffectOpaque; original source retained; explicit fog pass0 checked.
+No ambient-probe setter in plugin; one guarded recovery GI call; next-frame override cleanup and LateUpdate recovery checked.
+Installed NPCAI combat/wander assignment layouts verified: E3B56167087CAD313111119DECCE8FD573135F0655EE0A9C44DF7B758DBFF2D0
+All 11 Harmony targets exist; two optional NPCAI targets verified; one capped driver-wind force; fresh-food initialization only; player-only health/input variable writes; no explosion-force, networking or file-write calls.

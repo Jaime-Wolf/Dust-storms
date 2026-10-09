@@ -1,0 +1,2 @@
+c:\Users\whykn\AppData\Local\Packages\sandbox.{7f616bc1-c110-4eb8-b890-57bd252be41f}\AC\Temp\ApocaDustStorm-Harmony-3b64841324ee4838b857e725100c57bd\RuntimeStubs.cs(319,30): warning CS0649: Field 'ApocaChaseCamera.ChaseView.Override' is never assigned to, and will always have its default value false
+25 real-Harmony fog/sleep/movement compatibility checks passed against the installed loader library and controlled native/NPCAI-shaped fixtures.
