@@ -82,7 +82,8 @@ Player cover is refreshed at four Hz during storms, with immediate cab/clock/pau
 
 
 
-## 0.1.28 health HUD pulse
+## Boat shelter in 0.1.29
 
-StormHealthFlash changes only the native HEALTH label and number colors after an actual storm health decrease. It runs in StormRunner.LateUpdate, fades after 0.6 seconds, and triggers at most once every two seconds. The existing Exposure indicators setting hides it at zero. Cached Text references use Canvas/SurvivalCanvas/HealthLable and its HealthText child. Tint restoration preserves newer native/other-mod writes. There are no additional Harmony patches, health rules, AI changes or new UI objects.
+StormShelter recognizes native shipwreck_* hull collider hierarchies and permits their enclosing Wreck_* POI wrapper. Recognition does not mark every collider under the POI as shelter. Static solid cover is still required, with the existing roof/wall raycasts, collider cache and vehicle/actor/trigger exclusions. There is no new scene-wide scan or shelter volume. Player and AI geometry queries share this classifier.
 
+The current native inspection reports an optional NPCAI command-layout mismatch, also present when inspecting the original 0.1.28 binary. The movement adapter is unchanged by the boat fix and does not write AI health. The controlled old-layout Harmony fixtures still pass; compatibility with the currently installed NPCAI cannot be claimed.

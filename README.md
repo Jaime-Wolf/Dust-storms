@@ -1,6 +1,12 @@
-# ApocaDustStorm 0.1.28
+# ApocaDustStorm 0.1.29
 
 Thick worldwide dust storms inspired by Mad Max (2015), with a gradual approach and clearing, changing directional wind, low visibility and overcast lighting. Includes blowing ground dust, colliding twigs and sticks, gentle vehicle buffeting, sand-on-metal audio, branching dust lightning and occasional edible windblown lizards.
+
+## Changes in 0.1.29
+
+Boat POI hulls now provide storm shelter when their collision geometry covers you. Native shipwreck hulls and their Wreck POI wrappers are recognized without granting protection to the whole location. Open decks and uncovered ground remain exposed; car wrecks, props, vegetation and driveable vehicle roofs remain excluded. Boat cover uses the same damage, sleep, movement and protection-recovery rules as other structural shelter.
+
+234 model checks, 470 simulated runtime checks and 25 controlled Harmony compatibility checks passed (729 total). The 49 new boat checks include 28 native collider hierarchy fixtures. Release and dev compile successfully with matching gameplay methods. In-game boat coverage needs testing. The native compatibility inspection also found an existing mismatch with the currently installed optional NPCAI movement layout, reproduced against the previous 0.1.28 build; that adapter is unchanged in this update.
 
 ## Changes in 0.1.28
 
@@ -19,7 +25,7 @@ Both variants build and pass 661 automated regression assertions, native compati
 ## Storm hazards
 
 - Strong wind slows the player and AI. AI never receive storm health damage.
-- Exposed players take damage immediately. Caves, buildings and conex containers provide shelter and stop damage.
+- Exposed players take damage immediately. Caves, buildings, conex containers and covered boat hulls provide shelter and stop damage.
 - Actual storm health loss briefly flashes the existing health label and number yellow, no more than once every two seconds.
 - A vehicle initially provides 90% protection, falling gradually to 25% after five minutes in hazardous dust. Proper shelter restores protection gradually; exiting and re-entering a vehicle does not reset it.
 - Dusty screen edges and a small icon above the compass show exposure, vehicle cover or shelter. Active storms interrupt exposed sleep, including in vehicles, without a sleep or wake health penalty. Sleeping in proper shelter works normally.
@@ -47,13 +53,13 @@ The mod's automatic storms operate independently of the vanilla Dust Storm Off s
 
 This release has no storm or lightning testing hotkeys. Normal automatic weather remains available.
 
-ApocaDustStorm-0.1.28-Dev.zip is a separate installable development variant with the testing controls. Install either the release or dev variant, replacing the same DLL; never install both together. Both use the same plugin identity and settings file. Old preview-key values may remain in the config but cannot trigger the release.
+ApocaDustStorm-0.1.29-Dev.zip is a separate installable development variant with the testing controls. Install either the release or dev variant, replacing the same DLL; never install both together. Both use the same plugin identity and settings file. Old preview-key values may remain in the config but cannot trigger the release.
 
-ApocaDustStorm-0.1.28-Developer.zip contains source and verification material only. It is not an installation package. Both installable ZIPs contain only the DLL and README files.
+ApocaDustStorm-0.1.29-Developer.zip contains source and verification material only. It is not an installation package. Both installable ZIPs contain only the DLL and README files.
 
 ## Compatibility and credits
 
-Works with the separate ApocaChaseCamera 0.1.5. The optional NPCAI movement adapter was checked against the installed NPCAI 1.2.0; AI health remains untouched. Unusual versions or other weather/rendering mods may need a compatibility test.
+ApocaChaseCamera remains a separate mod. The optional NPCAI movement adapter has a known layout mismatch with the installed version used for testing; this also occurs with the previous 0.1.28 build. AI health remains untouched. Other weather/rendering mods may need a compatibility test.
 
 Storm atmosphere inspired by Mad Max (2015). Thanks to Sawyer, creator of Apocalypter. Native wind and food assets are loaded from the installed game and are not redistributed. This mod adds no telemetry or network requests.
 
@@ -64,11 +70,10 @@ The release compiles out the storm/lightning testing key handlers and their sett
 Archive layout: the repackaged installation ZIP opens directly to the mod's folder. Copy that folder into BepInEx/plugins. For an older ZIP that opens to a BepInEx folder, merge that folder into the game folder instead. Source and verification files are supplied separately.
 
 
-
 ## For other modders
 
-This repository shares the 0.1.28 original mod source and focused verification fixtures. Download the installation ZIP from [Releases](https://github.com/Jaime-Wolf/Dust-storms/releases/tag/v0.1.28).
+This repository shares the 0.1.29 original mod source and focused verification fixtures. Download the installation ZIP from [Releases](https://github.com/Jaime-Wolf/Dust-storms/releases/tag/v0.1.29).
 
 See [COMPATIBILITY.md](COMPATIBILITY.md) for integration details and [LICENSE.md](LICENSE.md) for reuse permissions. Separate compatibility patches are allowed; copying code into another mod, bundling or reuploading this mod, or distributing modified versions requires permission from Jaime-Wolf. Source visibility does not grant general reuse permission.
 
-Build with Source/build.ps1 (release) or Source/build.ps1 -Development (dev), using your installed game dependencies. Run Verification/test.ps1 and Verification/harmony-compat.ps1 for regressions; Verification/inspect-build.ps1 and Verification/check-variants.ps1 inspect compiled variants. No game binaries, decompiled game classes, extracted assets or native inspection dumps are included in this repository.
+Build with `Source/build.ps1` (release) or `Source/build.ps1 -Development` (dev), using your installed game dependencies. Run `Verification/test.ps1` and `Verification/harmony-compat.ps1` for regressions; `Verification/inspect-build.ps1` and `Verification/check-variants.ps1` inspect compiled variants. See [verification notes](Verification/README.md) for results and limitations. No game binaries, decompiled game classes, extracted assets or native inspection dumps are included in this repository.
