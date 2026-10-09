@@ -34,13 +34,20 @@ namespace ApocaDustStorm
         private static bool Classify(Transform root, Transform actor, out bool known)
         {
             known = false;
+            bool boatHull = false;
             for (Transform t = root; t != null; t = t.parent)
             {
                 string name = t.name;
+                // Native boat hulls use shipwreck_* beneath Wreck_* POIs.
+                // Exempt only hull geometry and its POI wrapper, not the car
+                // wrecks, loose props or vegetation placed at the same site.
+                bool hullPart = name.StartsWith("shipwreck_", StringComparison.OrdinalIgnoreCase);
+                if (hullPart) boatHull = true;
                 if (t == actor || t.GetComponent<VehicleController>() != null || t.Find("DriveTrigger") != null ||
-                    Contains(name, "wreck") || Contains(name, "tree") || Contains(name, "grass") ||
+                    (Contains(name, "wreck") && !hullPart && !(boatHull && name.StartsWith("Wreck_", StringComparison.OrdinalIgnoreCase))) ||
+                    Contains(name, "tree") || Contains(name, "grass") ||
                     Contains(name, "bush") || Contains(name, "twig") || Contains(name, "branch") || Contains(name, "leaf")) return false;
-                if (Contains(name, "cave") || Contains(name, "building") || Contains(name, "container") ||
+                if (hullPart || Contains(name, "cave") || Contains(name, "building") || Contains(name, "container") ||
                     Contains(name, "conex") || Contains(name, "house") || Contains(name, "garage") || Contains(name, "slum")) known = true;
             }
             return true;
@@ -65,7 +72,7 @@ namespace ApocaDustStorm
             Vector3 origin = actor.transform.position + Vector3.up * 0.6f;
             bool known;
             bool roof = Covered(origin, Vector3.up, 45, actor.transform, out known);
-            // Native caves, buildings and conex roofs identify their own structure.
+            // Native caves, buildings, conex and boat hulls identify their own structure.
             if (roof && known) return true;
             // Also support unnamed/modded structures when a roof and two walls enclose the actor.
             int walls = 0, knownWalls = 0;

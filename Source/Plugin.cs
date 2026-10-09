@@ -18,7 +18,7 @@ namespace ApocaDustStorm
     public sealed class Plugin : BaseUnityPlugin
     {
         public const string GUID = "local.apocalypter.duststorm";
-        public const string VERSION = "0.1.28";
+        public const string VERSION = "0.1.29";
         internal static ManualLogSource Log;
         internal static ConfigEntry<bool> Enabled, Automatic, Status, FollowNativeSwitch, Lightning, WindblownLizards;
         internal static ConfigEntry<float> Visibility, Dust, Darkness, Debris, MinimumDuration, MaximumDuration, BuildTime, ClearTime, Chance, MinimumCalm, Gusts, WindVolume, SandVolume, Headlights, FlashBrightness, DischargeVolume, Buffeting, MovementResistance, ExposureDamage, ExposureIndicators;

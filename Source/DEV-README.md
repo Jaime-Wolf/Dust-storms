@@ -1,6 +1,8 @@
-# ApocaDustStorm 0.1.28 - development build
+# ApocaDustStorm 0.1.29 - development build
 
 Installable development variant of the same worldwide dust-storm mod. It retains the gameplay and effect tuning of the release, with testing controls enabled:
+
+Version 0.1.29 recognizes covered boat hulls as structural shelter. Open decks remain exposed. The native NPC AI movement compatibility inspection currently reports a pre-existing layout mismatch with the installed optional NPCAI version; that adapter is unchanged.
 
 Version 0.1.28 adds a 0.6-second yellow pulse on the existing health label and number after actual storm health loss, at most once every two seconds. It uses Exposure indicators and preserves native HUD colors. Both variants have the same pulse; its visibility still needs an in-game test.
 
