@@ -55,7 +55,7 @@ This release has no storm or lightning testing hotkeys. Normal automatic weather
 
 ApocaDustStorm-0.1.29-Dev.zip is a separate installable development variant with the testing controls. Install either the release or dev variant, replacing the same DLL; never install both together. Both use the same plugin identity and settings file. Old preview-key values may remain in the config but cannot trigger the release.
 
-ApocaDustStorm-0.1.29-Developer.zip contains source and verification material only. It is not an installation package. Both installable ZIPs contain only the DLL and README files.
+ApocaDustStorm-0.1.29-Developer.zip contains source and verification material only. It is not an installation package. The release installation ZIP contains the DLL, README and in-game MODS menu icon. Source and verification remain separate.
 
 ## Compatibility and credits
 
@@ -77,3 +77,8 @@ This repository shares the 0.1.29 original mod source and focused verification f
 See [COMPATIBILITY.md](COMPATIBILITY.md) for integration details and [LICENSE.md](LICENSE.md) for reuse permissions. Separate compatibility patches are allowed; copying code into another mod, bundling or reuploading this mod, or distributing modified versions requires permission from Jaime-Wolf. Source visibility does not grant general reuse permission.
 
 Build with `Source/build.ps1` (release) or `Source/build.ps1 -Development` (dev), using your installed game dependencies. Run `Verification/test.ps1` and `Verification/harmony-compat.ps1` for regressions; `Verification/inspect-build.ps1` and `Verification/check-variants.ps1` inspect compiled variants. See [verification notes](Verification/README.md) for results and limitations. No game binaries, decompiled game classes, extracted assets or native inspection dumps are included in this repository.
+
+## MODS menu icon
+
+The installation ZIP now includes `icon.png` beside the DLL for the in-game MODS menu. Keep it in the mod folder. This packaging refresh leaves the gameplay code and version unchanged.
+
