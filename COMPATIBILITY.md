@@ -1,4 +1,4 @@
-# Compatibility guide - ApocaDustStorm 0.1.28
+# Compatibility guide - ApocaDustStorm 0.1.44
 
 This guide describes the current source, not a stable public integration API. Most implementation types are internal. Build a separate compatibility plugin against the installed mod where appropriate, or use guarded reflection; check the loaded version and fail safely if expected members or native layouts differ. Do not bundle a second ApocaDustStorm DLL. Read [LICENSE.md](LICENSE.md) for source reuse and redistribution rules.
 
@@ -16,10 +16,10 @@ This guide describes the current source, not a stable public integration API. Mo
 | Area | Files |
 | --- | --- |
 | Settings, lifecycle and scheduling | `Plugin.cs`, `StormRunner.cs`, `StormModel.cs`, `StormClock.cs`, `NativeStormClock.cs` |
-| Fog, camera matrices and lighting | `StormFog.cs`, `StormView.cs`, `StormDistanceFog.cs`, `AzureAtmosphere.cs`, `StormLighting.cs`, `StormHorizon.cs` |
-| Dust and colliding sticks | `StormVisuals.cs`, `StormDebris.cs`, `DebrisMotion.cs`, `DustMotion.cs` |
-| Wind/audio/lightning | `WindMath.cs`, `VehicleWind.cs`, `WindAudio.cs`, `SandAudio.cs`, `SandSound.cs`, `DustLightning.cs`, `DustDischargeModel.cs`, `DischargeSound.cs` |
-| Shelter, player hazards, protection and HUD | `StormShelter.cs`, `PlayerStormHazards.cs`, `StormHazardModel.cs`, `VehicleProtectionModel.cs`, `ExposureHud.cs`, `ExposureHudMath.cs` |
+| Fog, camera matrices and lighting | `StormFog.cs`, `StormView.cs`, `StormDistanceFog.cs`, `StormDepthRequest.cs`, `AzureAtmosphere.cs`, `StormLighting.cs`, `StormHorizon.cs` |
+| Dust and cosmetic sticks | `StormVisuals.cs`, `StormDebris.cs`, `DebrisMotion.cs`, `DustMotion.cs`, `DustEmissionBudget.cs`, `DustPickupSources.cs`, `DustVisibility.cs` |
+| Wind/audio/lightning | `WindMath.cs`, `VehicleWind.cs`, `WindAudio.cs`, `SandAudio.cs`, `SandSound.cs`, `DustLightning.cs`, `DustDischargeModel.cs`, `DischargeSound.cs`, `DischargeSamples.cs` |
+| Shelter, player hazards, protection and HUD | `StormShelter.cs`, `PlayerStormHazards.cs`, `StormHazardModel.cs`, `DamageGraceModel.cs`, `VehicleProtectionModel.cs`, `ExposureHud.cs`, `ExposureHudMath.cs` |
 | Movement and sleep | `StormMovement.cs`, `StormAIMovement.cs`, `StormSleep.cs` |
 | Native-storm suppression / edible loot | `NativeStormGuard.cs`, `WindblownLizards.cs`, `WindLootSchedule.cs`, `StormAssets.cs` |
 
@@ -33,7 +33,7 @@ Fog and lighting changes are scoped to the selected gameplay camera. Global/mate
 
 `DustLightning.AlignView` optionally discovers `ApocaChaseCamera.ChaseView.Apply(Camera)` by reflection. The bridge is intended to make rendered-camera alignment independent of PreCull subscription order. A changed camera type/method or a different camera mod may require a dedicated adapter. This is the integration point; it is not a required separate camera patch.
 
-`StormLighting` leaves the generated ambient probe native and uses one guarded `DynamicGI.UpdateEnvironment` call after full clearing, in LateUpdate with no open camera overrides. Do not add per-draw ambient-probe assignment or repeated calm-frame GI refreshes.
+`StormLighting` leaves the ambient probe native. After full clearing it restores valid current Azure ambient inputs and requests at most four clean sky-light refreshes around 0/1/3/6 seconds, outside open camera overrides. Preserve the bounded schedule, live day/night inputs and cancellation guards; do not add per-draw ambient-probe assignment or an idle refresh loop.
 
 ## Movement and AI mods
 
@@ -57,6 +57,7 @@ The exposure badge anchors above `Canvas/Compass` using its native RectTransform
 
 | Native target | Purpose |
 | --- | --- |
+| `CreateObject.OnEnter` | Observe the native Lizard_Dead food prefab reference; never suppress the action |
 | `PlayMakerFSM.OnEnable` | Recognized native storm suppression |
 | `Explosion.DoExplosion` | Stop recognized native storm force |
 | `Tornado.OnTriggerStay` | Stop recognized native storm suction |
@@ -87,3 +88,20 @@ Player cover is refreshed at four Hz during storms, with immediate cab/clock/pau
 StormShelter recognizes native shipwreck_* hull collider hierarchies and permits their enclosing Wreck_* POI wrapper. Recognition does not mark every collider under the POI as shelter. Static solid cover is still required, with the existing roof/wall raycasts, collider cache and vehicle/actor/trigger exclusions. There is no new scene-wide scan or shelter volume. Player and AI geometry queries share this classifier.
 
 The current native inspection reports an optional NPCAI command-layout mismatch, also present when inspecting the original 0.1.28 binary. The movement adapter is unchanged by the boat fix and does not write AI health. The controlled old-layout Harmony fixtures still pass; compatibility with the currently installed NPCAI cannot be claimed.
+
+## Performance and food spawning in 0.1.31
+
+Sticks are cosmetic and have no physics queries/collision. Dust uses short-lived actual validated pickup points, a bounded placement budget and conservative haze-hidden retirement; native particle sizes/caps/static-world collision are unchanged. Integrations should preserve the validated-point and visibility margins rather than approximate nearby ground heights.
+
+StormDistanceFog disables no-op passes before geometry, retains the full-resolution opaque-stage shader and caches stable uniforms. StormDepthRequest coordinates the two storm-owned effects. It preserves baseline depth, changed non-depth flags and active foreign image effects on release. Arbitrary late same-bit depth requests from unrelated scripts cannot be identified perfectly through Unity's flag alone; integrations needing guaranteed ownership should coordinate explicitly.
+
+WindblownLizards observes CreateObject.OnEnter only to cache a validated native food prefab. Its prefix returns void and the original action continues. The fallback asset search is bounded to three attempts per active storm at 30-second intervals and stops once resolved. The first eligible event is 20-40 seconds, later events 45-90, at strength >=0.20; at most two native food items per storm, deferred while sheltered. Existing creatures/loot are not moved or removed. Live food behavior needs in-game verification.
+
+
+## Haboob front and lighting in 0.1.44
+
+StormModel supplies a world-spanning downwind front and signed-distance arrival. HaboobMath/HaboobVolumeMath shape its irregular edge and visual volume. HaboobWall uses layered animated particles, with DustBillowAssets and StormBillows providing animated billows and terrain depth blending. StormTerrainSampler follows actual validated terrain heights. StormOriginObserver keeps the front aligned across native world-origin shifts. There is no separate cloud system.
+
+HaboobTransition decouples gust-front, entry and blanket effects. StormNearDust provides nearby streaks and an entry burst; StormBrownout owns a private runtime grading profile; StormLightScatter adds bounded local beam haze; NightFogColours controls the night dust palette. StormEntryShake uses a temporary scoped projection offset with EntryWindShakeModel's five-second fade, reduced strength in a vehicle and shelter/menu/sleep guards. Integrations must preserve view capture and scope restoration instead of permanently rotating the gameplay camera.
+
+DustOccupancy limits overlapping local dust. Existing particle pools, validated placement budgets and depth-request coordination are retained. The production code was tested in game by the author, but no benchmarked FPS improvement is claimed. DamageGraceModel tracks the optional 0-300 second grace period; shelter/end-of-storm resets it, vehicle entry/exit does not.
