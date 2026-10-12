@@ -53,19 +53,22 @@ namespace UnityEngine
         private Vector3 Right{get{return Vector3.Cross(Vector3.up,Forward).normalized;}}
         private Vector3 Up{get{return Vector3.Cross(Forward,Right).normalized;}}
         public Matrix4x4 worldToCameraMatrix{get{return Matrix4x4.View(Position,Forward);}}
-        public Matrix4x4 projectionMatrix{get{float half=(float)Math.Tan(fieldOfView*Math.PI/360);return new Matrix4x4{m00=1/(half*aspect),m11=1/half};}}
+        private Matrix4x4 customProjection;
+        public bool ProjectionIsCustom;public int ProjectionResets;
+        public Matrix4x4 projectionMatrix{get{if(ProjectionIsCustom)return customProjection;float half=(float)Math.Tan(fieldOfView*Math.PI/360);return new Matrix4x4{m00=1/(half*aspect),m11=1/half};}set{customProjection=value;ProjectionIsCustom=true;}}
+        public void ResetProjectionMatrix(){ProjectionResets++;ProjectionIsCustom=false;}
         public Ray ViewportPointToRay(Vector3 p)
         {float half=(float)Math.Tan(fieldOfView*Math.PI/360);return new Ray(Position,(Forward+Right*((p.x-0.5f)*2*half*aspect)+Up*((p.y-0.5f)*2*half)).normalized);}
         public Vector3 WorldToViewportPoint(Vector3 p)
         {Vector3 d=p-Position;float z=Vector3.Dot(d,Forward),half=(float)Math.Tan(fieldOfView*Math.PI/360);return new Vector3(0.5f+Vector3.Dot(d,Right)/(2*z*half*aspect),0.5f+Vector3.Dot(d,Up)/(2*z*half),z);}
     }
     public struct Ray {public Vector3 origin,direction;public Ray(Vector3 o,Vector3 d){origin=o;direction=d;}public Vector3 GetPoint(float distance){return origin+direction*distance;}}
-    public class Matrix4x4
+    public struct Matrix4x4
     {
         public float m00,m02,m11,m12;private Vector3 position,forward,right,up;private bool cameraSpace;
         public static Matrix4x4 View(Vector3 p,Vector3 f){Vector3 r=Vector3.Cross(Vector3.up,f).normalized;return new Matrix4x4{position=p,forward=f,right=r,up=Vector3.Cross(f,r).normalized,cameraSpace=true};}
         public Matrix4x4 inverse{get{return new Matrix4x4{position=position,forward=forward,right=right,up=up,cameraSpace=!cameraSpace,m00=m00==0?0:1/m00,m11=m11==0?0:1/m11,m02=m02,m12=m12};}}
-        public float this[int row,int column]{get{return row==1&&column==1?m11:m00;}set{if(row==1&&column==1)m11=value;else m00=value;}}
+        public float this[int row,int column]{get{if(row==0&&column==0)return m00;if(row==0&&column==2)return m02;if(row==1&&column==1)return m11;if(row==1&&column==2)return m12;return 0;}set{if(row==0&&column==0)m00=value;else if(row==0&&column==2)m02=value;else if(row==1&&column==1)m11=value;else if(row==1&&column==2)m12=value;}}
         public Vector3 MultiplyVector(Vector3 v){return cameraSpace?new Vector3(Vector3.Dot(v,right),Vector3.Dot(v,up),-Vector3.Dot(v,forward)):right*v.x+up*v.y-forward*v.z;}
         public Vector3 MultiplyPoint3x4(Vector3 v){return cameraSpace?MultiplyVector(v-position):position+MultiplyVector(v);}
     }
@@ -103,16 +106,16 @@ namespace UnityEngine
     public static class Resources {public static T[] FindObjectsOfTypeAll<T>() where T:Object{return Object.FindObjectsOfType<T>();}}
     public enum LightType { Directional,Point,Spot }
     public enum LightShadows {None,Hard,Soft}public enum LightRenderMode {Auto,ForcePixel,ForceVertex}
-    public class Light : Behaviour { public LightType type; public float intensity,range=30,bounceIntensity,shadowStrength,shadowBias,shadowNormalBias;public Color color;public LightShadows shadows;public LightRenderMode renderMode;public UnityEngine.Rendering.LightShadowResolution shadowResolution;public int cullingMask; }
+    public class Light : Behaviour { public LightType type; public float intensity,range=30,spotAngle=30,bounceIntensity,shadowStrength,shadowBias,shadowNormalBias;public Color color;public LightShadows shadows;public LightRenderMode renderMode;public UnityEngine.Rendering.LightShadowResolution shadowResolution;public int cullingMask; }
     public class Renderer : Component { public bool enabled = true; public Material sharedMaterial; }
-    public class ParticleSystemRenderer : Renderer {}
+    public class ParticleSystemRenderer : Renderer {public ParticleSystemRenderMode renderMode;public ParticleSystemSortMode sortMode;public float velocityScale,lengthScale,maxParticleSize;public UnityEngine.Rendering.ShadowCastingMode shadowCastingMode;public bool receiveShadows;public List<ParticleSystemVertexStream> Streams;public void SetActiveVertexStreams(List<ParticleSystemVertexStream> value){Streams=value;}}
     public class MeshRenderer : Renderer {public UnityEngine.Rendering.ShadowCastingMode shadowCastingMode;public bool receiveShadows;public UnityEngine.Rendering.LightProbeUsage lightProbeUsage;public UnityEngine.Rendering.ReflectionProbeUsage reflectionProbeUsage;}
     public class LineRenderer : Renderer {public bool useWorldSpace,receiveShadows;public int positionCount;public float startWidth,endWidth;public Color startColor,endColor;public Vector3[] Positions;public UnityEngine.Rendering.ShadowCastingMode shadowCastingMode;public UnityEngine.Rendering.LightProbeUsage lightProbeUsage;public UnityEngine.Rendering.ReflectionProbeUsage reflectionProbeUsage;public void SetPositions(Vector3[] points){Positions=points;} }
     public class MeshFilter : Component {public Mesh sharedMesh;}
-    public class Mesh : Object {public string name;public HideFlags hideFlags;public Vector3[] vertices;public Vector2[] uv;public Color[] colors;public int[] triangles;public void RecalculateBounds(){} }
-    public enum TextureFormat { RGBA32 } public enum TextureWrapMode { Clamp } public enum FilterMode { Bilinear }
+    public class Mesh : Object {public string name;public HideFlags hideFlags;public Vector3[] vertices;public Vector2[] uv;public Color[] colors;public int[] triangles;public void MarkDynamic(){}public void RecalculateBounds(){} }
+    public enum TextureFormat { RGBA32 } public enum TextureWrapMode { Clamp, Repeat } public enum FilterMode { Bilinear, Trilinear }
     public struct Color32 {public byte r,g,b,a;public Color32(byte red,byte green,byte blue,byte alpha){r=red;g=green;b=blue;a=alpha;}}
-    public class Texture2D : Object {public static Texture2D whiteTexture=new Texture2D();public string name;public HideFlags hideFlags;public TextureWrapMode wrapMode;public FilterMode filterMode;public int width,height;public Color32[] Pixels;public Texture2D(){}public Texture2D(int w,int h,TextureFormat format,bool mip){width=w;height=h;}public void SetPixels32(Color32[] pixels){Pixels=pixels;}public void Apply(bool mip,bool unreadable){} }
+    public class Texture2D : Object {public static Texture2D whiteTexture=new Texture2D();public string name;public HideFlags hideFlags;public TextureWrapMode wrapMode,wrapModeU,wrapModeV;public FilterMode filterMode;public int width,height;public bool MipChain,AppliedMips;public Color32[] Pixels;public Texture2D(){}public Texture2D(int w,int h,TextureFormat format,bool mip){width=w;height=h;MipChain=mip;}public void SetPixels32(Color32[] pixels){Pixels=pixels;}public void Apply(bool mip,bool unreadable){AppliedMips=mip;} }
     public struct Rect {public float x,y,width,height;public Rect(float a,float b,float c,float d){x=a;y=b;width=c;height=d;}}
     public enum EventType { Layout,Repaint } public class Event {public static Event current=new Event{type=EventType.Repaint};public EventType type;}
     public static class Screen {public static int width=1920,height=1080;}
@@ -122,6 +125,9 @@ namespace UnityEngine
     public enum RenderMode { ScreenSpaceOverlay,ScreenSpaceCamera,WorldSpace } public class Canvas : Behaviour {public RenderMode renderMode;public Camera worldCamera;}
     public struct Vector2 {public float x,y;public Vector2(float a,float b){x=a;y=b;}}
     public class Collider : Component { public bool enabled = true; public bool isTrigger; public Rigidbody attachedRigidbody; }
+    public class TerrainCollider : Collider {}
+    public class Terrain : Behaviour {public static Terrain[] Tiles=new Terrain[0];public static int Reads;public static Terrain[] activeTerrains{get{Reads++;return Tiles;}}public TerrainData terrainData;}
+    public class TerrainData : Object {public Vector3 size;public Func<float,float,float> Height;public float GetInterpolatedHeight(float x,float y){return Height(x,y);}}
     public class SphereCollider : Collider { public float radius; }
     public class Rigidbody : Component
     {
@@ -133,7 +139,7 @@ namespace UnityEngine
     public enum ForceMode {Force}
     public enum HideFlags {HideAndDontSave}
     public enum QueryTriggerInteraction {Ignore}
-    public struct Quaternion {public static Quaternion identity {get{return new Quaternion();}}public static Quaternion Euler(float x,float y,float z){return new Quaternion();}}
+    public struct Quaternion {public static Quaternion identity {get{return new Quaternion();}}public static Quaternion LookRotation(Vector3 forward){return identity;}public static Quaternion Euler(float x,float y,float z){return new Quaternion();}}
     public struct RaycastHit {public Collider collider;public float distance;public Vector3 normal,point;}
     public static class Physics
     {
@@ -145,9 +151,10 @@ namespace UnityEngine
         public static bool ComputePenetration(Collider a,Vector3 ap,Quaternion ar,Collider b,Vector3 bp,Quaternion br,out Vector3 normal,out float depth){normal=Vector3.zero;depth=0;return false;}
     }
     public static class Time {public static float fixedDeltaTime=0.02f,unscaledTime,timeScale=1;public static int frameCount;}
+    public static class Application {public static bool isFocused=true;}
     public class Material : Object
     {
-        public Material(Shader shader){}public HideFlags hideFlags;public Texture2D mainTexture;public int renderQueue;
+        public int UniformWrites;public Material(Shader shader){}public HideFlags hideFlags;public Texture2D mainTexture;public int renderQueue;
         public Material(){}public Material(Material other){foreach(var pair in other.colors)colors[pair.Key]=pair.Value;foreach(var pair in other.floats)floats[pair.Key]=pair.Value;}
         public bool ThrowOnceOnWrite;
         private readonly Dictionary<string,Color> colors=new Dictionary<string,Color>();
@@ -155,13 +162,15 @@ namespace UnityEngine
         private readonly Dictionary<string,Vector4> vectors=new Dictionary<string,Vector4>();
         private readonly Dictionary<string,Matrix4x4> matrices=new Dictionary<string,Matrix4x4>();
         public readonly HashSet<string> Keywords=new HashSet<string>();
+        public readonly Dictionary<string,bool> Passes=new Dictionary<string,bool>();
+        public void SetShaderPassEnabled(string name,bool active){Passes[name]=active;}
         public void EnableKeyword(string key){Keywords.Add(key);}
-        public void SetVector(string key,Vector4 value){vectors[key]=value;}public Vector4 GetVector(string key){return vectors[key];}
-        public object BoundTexture;public void SetTexture(string key,object value){BoundTexture=value;}
-        public void SetMatrix(string key,Matrix4x4 value){matrices[key]=value;}public Matrix4x4 GetMatrix(string key){return matrices[key];}
+        public void SetVector(string key,Vector4 value){UniformWrites++;vectors[key]=value;}public Vector4 GetVector(string key){return vectors[key];}
+        public object BoundTexture;public void SetTexture(string key,object value){UniformWrites++;BoundTexture=value;}
+        public void SetMatrix(string key,Matrix4x4 value){UniformWrites++;matrices[key]=value;}public Matrix4x4 GetMatrix(string key){return matrices[key];}
         public bool HasProperty(string name){return colors.ContainsKey(name)||floats.ContainsKey(name);}
-        public Color GetColor(string name){return colors[name];}public void SetColor(string name,Color color){if(ThrowOnceOnWrite){ThrowOnceOnWrite=false;throw new Exception("Simulated material write failure");}colors[name]=color;}
-        public float GetFloat(string name){return floats[name];}public void SetFloat(string name,float value){floats[name]=value;}
+        public Color GetColor(string name){return colors[name];}public void SetColor(string name,Color color){UniformWrites++;if(ThrowOnceOnWrite){ThrowOnceOnWrite=false;throw new Exception("Simulated material write failure");}colors[name]=color;}
+        public float GetFloat(string name){return floats[name];}public void SetFloat(string name,float value){UniformWrites++;floats[name]=value;}
         public void SetInt(string name,int value){floats[name]=value;}
     }
     public class Transform : Component
@@ -175,12 +184,12 @@ namespace UnityEngine
     }
     public class GameObject : Object
     {
-        public bool activeInHierarchy=true;public void SetActive(bool value){activeInHierarchy=value;}
+        public int layer;public bool activeSelf {get{return activeInHierarchy;}} public bool activeInHierarchy=true;public void SetActive(bool value){activeInHierarchy=value;}
         private string instanceName;public static int Finds,NameReads;public string name{get{NameReads++;return instanceName;}set{instanceName=value;}}public HideFlags hideFlags; public Transform transform; public List<Component> Components = new List<Component>();
         public bool IsPrefab;public UnityEngine.SceneManagement.Scene scene{get{return new UnityEngine.SceneManagement.Scene{Valid=!IsPrefab};}}
         public GameObject(string n) { name=n; transform=new Transform {gameObject=this}; Components.Add(transform); }
         public static GameObject Find(string name){Finds++;foreach(Object obj in Object.All){GameObject go=obj as GameObject;if(go!=null&&go.name==name&&!go.Destroyed&&go.activeInHierarchy)return go;}return null;}
-        public T Add<T>() where T : Component,new() { T c=new T {gameObject=this}; Components.Add(c); return c; }
+        public T Add<T>() where T : Component,new() { T c=new T {gameObject=this}; Components.Add(c); if(c is ParticleSystem)Add<ParticleSystemRenderer>(); return c; }
         public T AddComponent<T>() where T : Component,new() {return Add<T>();}
         public T GetComponent<T>() where T : Component { return Components.Find(x=>x is T&&!x.Destroyed) as T; }
         public T[] GetComponents<T>() where T : Component { return Components.FindAll(x=>x is T).ConvertAll(x=>(T)x).ToArray(); }
@@ -215,10 +224,10 @@ namespace UnityEngine
     }
     public static class DynamicGI
     {
-        public static int Requests;public static bool ThrowOnce;
+        public static int Requests,AcceptedRequests;public static bool ThrowOnce,IgnoreNext;
         public static float AmbientAtRequest;public static Color SkyAtRequest;
         public static UnityEngine.Rendering.SphericalHarmonicsL2 ProbeAtRequest;
-        public static void UpdateEnvironment(){Requests++;if(ThrowOnce){ThrowOnce=false;throw new Exception("Simulated GI request failure");}AmbientAtRequest=RenderSettings.ambientIntensity;SkyAtRequest=RenderSettings.ambientSkyColor;ProbeAtRequest=RenderSettings.ambientProbe;}
+        public static void UpdateEnvironment(){Requests++;if(ThrowOnce){ThrowOnce=false;throw new Exception("Simulated GI request failure");}AmbientAtRequest=RenderSettings.ambientIntensity;SkyAtRequest=RenderSettings.ambientSkyColor;ProbeAtRequest=RenderSettings.ambientProbe;if(IgnoreNext){IgnoreNext=false;return;}AcceptedRequests++;}
     }
     public class Shader
     {
@@ -231,7 +240,7 @@ namespace UnityEngine
         public static void SetGlobalFloat(string n,float v){floats[n]=v;}
     }
     public static class Mathf
-    { public static float Max(float a,float b){return Math.Max(a,b);} public static float Min(float a,float b){return Math.Min(a,b);}
+    { public static int Min(int a,int b){return Math.Min(a,b);} public static int Max(int a,int b){return Math.Max(a,b);} public static float Tan(float x){return (float)Math.Tan(x);} public const float Deg2Rad=(float)Math.PI/180;public static float Max(float a,float b){return Math.Max(a,b);} public static float Min(float a,float b){return Math.Min(a,b);}
       public static float Clamp(float a,float b,float c){return Math.Max(b,Math.Min(c,a));} public static float Clamp01(float x){return Clamp(x,0,1);} public static float Log(float x){return (float)Math.Log(x);}
       public static float Exp(float x){return (float)Math.Exp(x);}public static float Lerp(float a,float b,float x){return a+(b-a)*Clamp01(x);}
       public static float MoveTowards(float a,float b,float delta){return Math.Abs(b-a)<=delta?b:a+Math.Sign(b-a)*delta;}
@@ -241,7 +250,7 @@ namespace UnityEngine
     {
         public float x,y,z;public Vector3(float a,float b,float c){x=a;y=b;z=c;}
         public static Vector3 zero{get{return new Vector3();}}public static Vector3 up{get{return new Vector3(0,1,0);}}
-        public static Vector3 one{get{return new Vector3(1,1,1);}}
+        public static Vector3 down{get{return new Vector3(0,-1,0);}}public static Vector3 one{get{return new Vector3(1,1,1);}}
         public static Vector3 forward{get{return new Vector3(0,0,1);}}public static float Distance(Vector3 a,Vector3 b){return (a-b).magnitude;}
         public float sqrMagnitude{get{return x*x+y*y+z*z;}}public float magnitude{get{return (float)Math.Sqrt(sqrMagnitude);}}
         public Vector3 normalized{get{return magnitude<0.000001f?zero:this*(1/magnitude);}}
@@ -257,6 +266,11 @@ namespace UnityEngine
 }
 namespace UnityEngine.AzureSky
 {
+    public class AzureEnvironmentController : UnityEngine.Behaviour
+    {
+        public float environmentIntensity=1;
+        public UnityEngine.Color environmentAmbientColor=UnityEngine.Color.white,environmentEquatorColor=UnityEngine.Color.white,environmentGroundColor=UnityEngine.Color.white;
+    }
     public class AzureFogScattering : UnityEngine.Behaviour
     {
         public UnityEngine.Material fogScatteringMaterial;public int InitCalls;private void Start(){InitCalls++;}
@@ -290,6 +304,7 @@ namespace HutongGames.PlayMaker
     public class FsmState {public string Name;public FsmTransition[] Transitions=new FsmTransition[0];public int Entries;}
     public class FsmTransition {public FsmEvent FsmEvent;public string ToState;}
     public class FsmEvent {public string Name;}
+    public class FsmGameObject {public UnityEngine.GameObject Value;}
     public class FsmString {public string Value;}
     public class FsmFloat {public bool IsNone;public float Value;}
     public class FsmVector3 {public bool IsNone;public UnityEngine.Vector3 Value;}
@@ -298,7 +313,7 @@ namespace HutongGames.PlayMaker
     { public UnityEngine.GameObject Owner; public Fsm Fsm; public bool Finished; public void Finish(){Finished=true;} }
 }
 namespace HutongGames.PlayMaker.Actions
-{ public class Explosion : HutongGames.PlayMaker.FsmStateAction {} public class SendEvent : HutongGames.PlayMaker.FsmStateAction {} public class CallMethod:HutongGames.PlayMaker.FsmStateAction{public HutongGames.PlayMaker.FsmString methodName;public int NativeCalls;internal void DoMethodCall(){NativeCalls++;}} public class GetAxisKeyAxis:HutongGames.PlayMaker.FsmStateAction{public HutongGames.PlayMaker.FsmFloat store;public float NativeInput=5;internal void DoGetAxis(){store.Value=NativeInput;}}public class SetVelocity:HutongGames.PlayMaker.FsmStateAction{public UnityEngine.Vector3 NativeCommand;internal void DoSetVelocity(){Owner.GetComponent<UnityEngine.Rigidbody>().velocity=NativeCommand;}} }
+{ public class CreateObject : HutongGames.PlayMaker.FsmStateAction {public HutongGames.PlayMaker.FsmGameObject gameObject;public int NativeCalls;[System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)] public void OnEnter(){NativeCalls++;} } public class Explosion : HutongGames.PlayMaker.FsmStateAction {} public class SendEvent : HutongGames.PlayMaker.FsmStateAction {} public class CallMethod:HutongGames.PlayMaker.FsmStateAction{public HutongGames.PlayMaker.FsmString methodName;public int NativeCalls;internal void DoMethodCall(){NativeCalls++;}} public class GetAxisKeyAxis:HutongGames.PlayMaker.FsmStateAction{public HutongGames.PlayMaker.FsmFloat store;public float NativeInput=5;internal void DoGetAxis(){store.Value=NativeInput;}}public class SetVelocity:HutongGames.PlayMaker.FsmStateAction{public UnityEngine.Vector3 NativeCommand;internal void DoSetVelocity(){Owner.GetComponent<UnityEngine.Rigidbody>().velocity=NativeCommand;}} }
 public class PlayMakerFSM : UnityEngine.Behaviour
 {
     private string fsmName;public string FsmName{get{return fsmName;}set{fsmName=value;Fsm.Name=value;Fsm.FsmComponent=this;}}
@@ -307,6 +322,16 @@ public class PlayMakerFSM : UnityEngine.Behaviour
     public void SetState(string name){Fsm.SwitchState(Fsm.GetState(name));}
 }
 public class Tornado : UnityEngine.Behaviour {}
+public class FloatingOrigin : UnityEngine.Behaviour {
+    public UnityEngine.Transform Anchor;public UnityEngine.Vector3 Delta;
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)] internal void LateUpdate(){if(Anchor!=null)Anchor.position+=Delta;}
+}
+public class FloatingOriginAdvanced : FloatingOrigin {
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)] internal new void LateUpdate(){if(Anchor!=null)Anchor.position+=Delta;}
+}
+public class FloatingOriginNew : FloatingOrigin {
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)] internal new void LateUpdate(){if(Anchor!=null)Anchor.position+=Delta;}
+}
 public class EnviroSkyRenderingLW : UnityEngine.Behaviour {}
 public class EnviroFogSettings { public float startDistance; }
 public class EnviroSkyLite { public static EnviroSkyLite instance = new EnviroSkyLite(); public EnviroFogSettings fogSettings = new EnviroFogSettings(); }
@@ -314,11 +339,13 @@ namespace ApocaDustStorm
 {
     internal class Logger { internal void LogInfo(string text) {} internal void LogWarning(string text){} }
     internal static class Plugin
-    { internal class BoolSetting{public bool Value=true;}internal const string GUID="local.apocalypter.duststorm";internal static BoolSetting WindblownLizards=new BoolSetting();internal static bool Active=true,Lightning=true;internal static bool DustLightningEnabled{get{return Active&&Lightning;}} internal static Logger Log=new Logger(); internal static object Visibility=null,Gusts=null,Buffeting=null,Darkness=null,Headlights=null,SandVolume=null,FlashBrightness=null,DischargeVolume=null,WindVolume=null,ExposureDamage=null,ExposureIndicators=null,MovementResistance=null; internal static float StormVisibility {get{return Value(Visibility,45)*1.02f;}} internal static float Value(object entry,float fallback){return entry==null?fallback:(float)entry;} }
+    { internal class BoolSetting{public bool Value=true;}internal const string GUID="local.apocalypter.duststorm";internal static BoolSetting WindblownLizards=new BoolSetting();internal static bool Active=true,Lightning=true;internal static bool DustLightningEnabled{get{return Active&&Lightning;}} internal static Logger Log=new Logger(); internal static object EntryShake=null,Brownout=null,MicroDust=null,LightScatter=null,WallStrength=null,Dust=null,Visibility=null,Gusts=null,Buffeting=null,Darkness=null,Headlights=null,SandVolume=null,FlashBrightness=null,DischargeVolume=null,WindVolume=null,ExposureDamage=null,ExposureIndicators=null,MovementResistance=null,DamageGrace=null; internal static float StormVisibility {get{return Value(Visibility,45)*1.02f;}} internal static float Value(object entry,float fallback){return entry==null?fallback:(float)entry;} }
     internal static class StormRunner
-    { internal static readonly StormModel Model=new StormModel();internal static bool CanRender {get{return Plugin.Active && View!=null;}} internal static UnityEngine.Camera View; internal static float Strength,Gust=0; }
+    { internal static readonly StormModel Model=new StormModel();internal static bool CanRender {get{return Plugin.Active && View!=null;}} internal static UnityEngine.Camera View; internal static float Strength,Gust=0,ImpactStrength;internal static float LightingStrength{get{return Strength;}}internal static float PaletteStrength{get{return Strength;}}
+      internal static UnityEngine.Transform OriginAnchor;internal static int OriginShifts;
+      internal static void ShiftOrigin(UnityEngine.Transform anchor,UnityEngine.Vector3 delta){if(anchor!=OriginAnchor)return;OriginShifts++;Model.ShiftOrigin(delta.x,delta.z);StormView.Clear();} }
 }
-namespace Apocasetter { public static class GameMenu { public static bool Paused;public static bool InGame=true; } }
+namespace Apocasetter { public static class GameMenu { public static bool Paused;public static bool InGame=true; } public static class InputBlocker {public static bool Active;} }
 namespace UnityEngine.SceneManagement {public struct Scene {public bool Valid;public bool IsValid(){return Valid;}}}
 namespace NPCAI
 {
@@ -343,6 +370,7 @@ namespace UnityEngine.Rendering
     public enum AmbientMode {Skybox,Trilight,Flat}
     public enum ShadowCastingMode {Off,On}public enum LightProbeUsage {Off}public enum ReflectionProbeUsage {Off}public enum LightShadowResolution {FromQualitySettings,Low,Medium,High,VeryHigh}
     public enum CompareFunction {LessEqual=4}
+    public enum BlendMode {SrcAlpha=5,OneMinusSrcAlpha=10} public enum BlendOp {Add} public enum CullMode {Off}
     public struct SphericalHarmonicsL2
     {
         private float[] values;
@@ -350,3 +378,4 @@ namespace UnityEngine.Rendering
         {get{return values==null?0:values[channel*9+coefficient];}set{values=values==null?new float[27]:(float[])values.Clone();values[channel*9+coefficient]=value;}}
     }
 }
+

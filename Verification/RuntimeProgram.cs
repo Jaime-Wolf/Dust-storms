@@ -12,6 +12,7 @@ namespace ApocaDustStorm
         private static bool Prefix(Type patch,object instance){return (bool)patch.GetMethod("Prefix",BindingFlags.NonPublic|BindingFlags.Static).Invoke(null,new[]{instance});}
         private static void Main()
         {
+            StormPerformanceChecks.AudioWarmup(Check);
             GameObject storm=new GameObject("SandStorm123"); PlayMakerFSM marker=storm.Add<PlayMakerFSM>();marker.FsmName="SandPlayer";
             PlayMakerFSM move=storm.Add<PlayMakerFSM>();move.FsmName="Move";
             GameObject physics=new GameObject("TornadoPhysics");physics.transform.parent=storm.transform;
@@ -79,10 +80,19 @@ namespace ApocaDustStorm
             HealthFlashRuntimeChecks.Run(Check);
             PerformanceRuntimeChecks.Run(Check);
             BoatShelterRuntimeChecks.Run(Check);
+            StormPerformanceChecks.Run(Check);
+            StormOptimizationChecks.Run(Check);
+            HaboobRuntimeChecks.Run(Check);
+            TerrainElevationChecks.Run(Check);
+            OptimizationNightChecks.Run(Check);
+            EntryShakeRuntimeChecks.Run(Check);
+            LightingRecoveryChecks.Run(Check);
+            PhasedRuntimeChecks.Run(Check);
             Console.WriteLine(count+" simulated storm guard, fog, lighting, collision and vehicle-wind checks passed. Unity rendering/PhysX are not simulated.");
         }
         private static void DistanceFogChecks(Camera camera,Camera menu)
         {
+            camera=new GameObject("DistanceFog isolated fixture").Add<Camera>();
             StormRunner.View=camera;StormRunner.Strength=1;Plugin.Active=true;StormDistanceFog.Clear();
             camera.depthTextureMode=DepthTextureMode.None;camera.UseRenderedPose=true;camera.RenderedPosition=new Vector3(100,8,50);
             camera.fieldOfView=60;Time.frameCount++;StormView.Capture(camera);
@@ -193,7 +203,7 @@ namespace ApocaDustStorm
             Check(!added.enabled&&effect.enabled,"Camera switching disables added effect and preserves native first-person effect");
             chase.depthTextureMode=DepthTextureMode.Depth;
             AzureAtmosphere.Clear();Check(added.Destroyed&&added.fogScatteringMaterial.Destroyed&&!effect.Destroyed&&!image.Destroyed,"Cleanup destroys only owned chase effect and cloned material");
-            Check(chase.depthTextureMode==DepthTextureMode.None,"Owned chase depth-texture request restores on cleanup");
+            Check(chase.depthTextureMode==DepthTextureMode.Depth,"A new depth request after storm deactivation is foreign and survives cleanup");
             AzureAtmosphere.Scan();AzureAtmosphere.EnsureCamera(chase);
             Check(chase.GetComponent<UnityEngine.AzureSky.AzureFogScattering>()!=null,"Storm can recreate its chase fog after disable and re-enable");AzureAtmosphere.Clear();
             StormRunner.View=camera;StormRunner.Strength=.3f;AzureAtmosphere.Scan();StormFog.Push(camera);
@@ -211,7 +221,7 @@ namespace ApocaDustStorm
             NativeStormClock.Reset();NativeStormClock.Scan();StormRunner.View=camera;StormHorizon.Available=true;
             RenderSettings.fogColor=Color.white;Shader.SetGlobalVector("_weatherFogMod",new Vector4(1,1,1,0.4f));
             Shader.SetGlobalFloat("_Azure_GlobalFogDensity",0.2f);Shader.SetGlobalFloat("_Azure_HeightFogDensity",0.12f);
-            float peak=0;Color dayPeak=new Color();double maxStep=0;float previous=1;
+            float peak=0;Color dayPeak=new Color();double maxStep=0;float previous=NightFogColours.Colour(Color.white,1).r;
             foreach(float strength in new[]{0.05f,0.1f,0.2f,0.4f,0.7f,1f})
             {
                 StormRunner.Strength=strength;clock.SunElevation=1;StormFog.Push(camera);
@@ -223,8 +233,8 @@ namespace ApocaDustStorm
                 Check(night.r<=day.r+0.000001&&night.g<=day.g+0.000001,"White native night fog dims before dense dust at strength "+strength);
                 Check(density==RenderSettings.fogDensity&&weather.w==nightWeather.w,"Night colour correction preserves distance density and weather opacity at "+strength);
                 Check(Shader.GetGlobalFloat("_Azure_GlobalFogDensity")<=azure&&Shader.GetGlobalFloat("_Azure_HeightFogDensity")<=0.12f,"Night handoff also removes residual native scattering at "+strength);
-                if(strength==0.2f){peak=night.r;Check(night.r<0.39f&&night.g<0.32f&&night.b<0.24f&&Shader.GetGlobalFloat("_Azure_GlobalFogDensity")==0&&Shader.GetGlobalFloat("_Azure_HeightFogDensity")==0,"White horizon is replaced by muted earth colour early in a night storm");}
-                if(strength==1)Check(Math.Abs(night.r-dayPeak.r)<0.000001&&Math.Abs(night.g-dayPeak.g)<0.000001&&Math.Abs(night.r-peak)<0.000001,"Accepted full-strength fog colour is unchanged for day and night");
+                if(strength==0.2f){peak=night.r;Check(night.r>0.18f&&night.r<0.24f&&night.g>0.12f&&night.g<0.16f&&night.b>0.06f&&night.b<0.09f&&Shader.GetGlobalFloat("_Azure_GlobalFogDensity")==0&&Shader.GetGlobalFloat("_Azure_HeightFogDensity")==0,"White horizon is replaced by visible warm brown early in a night storm");}
+                if(strength==1)Check(night.r<dayPeak.r*0.65f&&night.r>0.18f&&night.r>night.g*1.4f&&night.g>night.b*1.5f&&Math.Abs(night.r-peak)<0.000001,"Peak night fog retains warm brown instead of fading almost to black");
                 StormFog.Restore();
                 Check(RenderSettings.fogColor.r==1&&Shader.GetGlobalVector("_weatherFogMod").w==0.4f&&Shader.GetGlobalVector("_weatherFogMod").x==1&&Shader.GetGlobalFloat("_Azure_GlobalFogDensity")==0.2f,"Camera cleanup restores native white fog and material globals at "+strength);
             }
@@ -233,14 +243,34 @@ namespace ApocaDustStorm
                 StormRunner.Strength=i/1000f;StormFog.Push(camera);float value=RenderSettings.fogColor.r;
                 maxStep=Math.Max(maxStep,Math.Abs(value-previous));previous=value;StormFog.Restore();
             }
-            Check(maxStep<0.006,"Night colour transition ramps smoothly from native fog without a one-frame brightness switch");
+            // Smoothstep spans more contrast now (white to genuine night colour).
+            // Its analytical maximum is <0.008 per 0.001 strength increment.
+            Check(maxStep<0.008,"Night colour transition ramps smoothly from native fog without a one-frame brightness switch");
             clock.SunElevation=1;StormRunner.Strength=0.1f;StormFog.Push(camera);Color dayTwilight=RenderSettings.fogColor;StormFog.Restore();
             clock.SunElevation=-1;StormFog.Push(camera);Color nightTwilight=RenderSettings.fogColor;StormFog.Restore();
             clock.SunElevation=-0.075f;StormFog.Push(camera);Color twilight=RenderSettings.fogColor;StormFog.Restore();
             Check(twilight.r>nightTwilight.r&&twilight.r<dayTwilight.r,"Live sun elevation blends night palette continuously through twilight");
+            Color brightNative=StormFog.DustColour(Color.white,1,1),darkNative=StormFog.DustColour(new Color(0.001f,0.001f,0.001f,1),1,1);
+            Check(Math.Abs(brightNative.r-darkNative.r)<0.000001&&Math.Abs(brightNative.g-darkNative.g)<0.000001&&Math.Abs(brightNative.b-darkNative.b)<0.000001,"Explicit night brown is independent of stale white or black native fog");
+            foreach(float amount in new[]{0f,0.2f,0.5f,1f})
+            {
+                Color nativeColour=new Color(0.25f,0.2f,0.1f,1);
+                Color expected=StormFog.Sand*(0.25f*1.5f)*StormLighting.SkyFactor(amount);
+                Color actual=StormFog.DustColour(nativeColour,amount,0);
+                Check(Math.Abs(actual.r-expected.r)<0.000001&&Math.Abs(actual.g-expected.g)<0.000001&&Math.Abs(actual.b-expected.b)<0.000001,"Explicit night palette leaves daytime fog formula unchanged at "+amount);
+            }
             clock.SunElevation=-1;StormRunner.Strength=0.4f;StormFog.PreCull(camera);
             MeshRenderer backdrop=null;foreach(MeshRenderer item in UnityEngine.Object.FindObjectsOfType<MeshRenderer>())if(item.name=="ApocaDustStorm.Horizon")backdrop=item;
             Check(backdrop!=null&&backdrop.enabled&&Math.Abs(backdrop.sharedMaterial.GetColor("_Color").r-RenderSettings.fogColor.r)<0.000001&&RenderSettings.fogColor.r<0.39f,"Part-strength night backdrop uses corrected earth colour rather than a separate white material");
+            StormDistanceFog pass=camera.GetComponent<StormDistanceFog>();
+            float baseDensity=RenderSettings.fogDensity;Color fogColour=RenderSettings.fogColor;
+            pass.Render(new RenderTexture(),new RenderTexture());Material farMaterial=Graphics.LastMaterial;
+            Check(Math.Abs(farMaterial.GetVector("_SceneFogParams").y/1.442695f-baseDensity*0.75f)<0.000001,"Production distance pass receives gentler night attenuation");
+            Check(Math.Abs(farMaterial.GetVector("_DistanceParams").x+DistanceFogMath.CorrectionStart(baseDensity,1))<0.0001,"Production distance pass receives the broadened night start");
+            Check(Math.Abs(farMaterial.GetColor("unity_FogColor").r-fogColour.r)<0.000001&&Math.Abs(backdrop.sharedMaterial.GetColor("_Color").r-fogColour.r)<0.000001,"Far fog, world fog and backdrop share one dark night palette");
+            clock.SunElevation=-0.075f;pass.Render(new RenderTexture(),new RenderTexture());
+            Check(Math.Abs(farMaterial.GetVector("_SceneFogParams").y/1.442695f-baseDensity*0.875f)<0.000001,"Sun elevation invalidates cached attenuation even at unchanged density");
+            clock.SunElevation=-1;
             StormFog.PostRender(camera);StormHorizon.Clear();
             StormRunner.Strength=0.1f;StormFog.Push(camera);
             typeof(StormEnviroFogPatch).GetMethod("Finalizer",BindingFlags.NonPublic|BindingFlags.Static).Invoke(null,new object[]{new Exception("Night render failure"),true});
@@ -589,43 +619,16 @@ namespace ApocaDustStorm
             body.mass=1600;body.worldCenterOfMass=new Vector3(float.PositiveInfinity,0,0);VehicleWind.Tick(player,model,1,1);Check(body.Forces==calls,"Invalid center of mass gets no force");
             body.worldCenterOfMass=Vector3.zero;health.ActiveStateName="playerDeath";VehicleWind.Tick(player,model,1,1);Check(body.Forces==calls,"Death stops driver wind force");VehicleWind.Reset();
         }
-        private sealed class PlaneWorld : IDebrisWorld
-        {
-            internal Vector3 Surface=Vector3.zero;
-            public bool Sweep(Vector3 p,float radius,Vector3 move,out DebrisHit hit)
-            {
-                hit=new DebrisHit();float fraction=2;bool found=false;
-                if(move.y<0&&p.y+move.y<radius){fraction=Math.Max(0,(radius-p.y)/move.y);hit.Normal=Vector3.up;found=true;}
-                if(move.x>0&&p.x+move.x>5-radius){float f=Math.Max(0,(5-radius-p.x)/move.x);if(f<fraction){fraction=f;hit.Normal=new Vector3(-1,0,0);found=true;}}
-                hit.Distance=fraction*move.magnitude;hit.SurfaceVelocity=Surface;return found;
-            }
-            public bool Penetration(Vector3 p,float radius,out Vector3 correction,out DebrisHit hit)
-            {
-                correction=Vector3.zero;hit=new DebrisHit();hit.SurfaceVelocity=Surface;
-                if(p.y<radius){hit.Normal=Vector3.up;correction=Vector3.up*(radius-p.y+0.001f);return true;}
-                if(p.x>5-radius){hit.Normal=new Vector3(-1,0,0);correction=hit.Normal*(p.x-(5-radius)+0.001f);return true;}return false;
-            }
-        }
         private static void DebrisChecks()
         {
-            Vector3 bounce=DebrisMotion.Bounce(new Vector3(10,-5,0),Vector3.up,Vector3.zero);
-            Check(bounce.y>0&&bounce.x<10,"Twig floor impact bounces with friction");
-            Check(bounce.magnitude<new Vector3(10,-5,0).magnitude,"Static collision loses energy");
-            bounce=DebrisMotion.Bounce(new Vector3(0,2,0),Vector3.up,Vector3.zero);Check(bounce.y==2,"Separating twig is not reflected back into surface");
-            bounce=DebrisMotion.Bounce(new Vector3(10,0,0),new Vector3(-1,0,0),new Vector3(-60,0,0));
-            Check(bounce.x<0&&bounce.magnitude<=DebrisMotion.MaxSpeed+0.001f,"Moving vehicle surface redirects twig at capped speed");
-            PlaneWorld world=new PlaneWorld();Vector3 p=new Vector3(4.6f,1,0),v=new Vector3(22,0,0);
-            DebrisMotion.Step(ref p,ref v,0.1f,0.02f,new Vector3(1,0,0),1,world);
-            Check(p.x<=4.9f&&v.x<0,"Fast twig sweep bounces before crossing thin wall");
-            p=new Vector3(0,1,0);v=new Vector3(0,-10,0);
-            for(int i=0;i<200;i++)DebrisMotion.Step(ref p,ref v,0.2f,0.02f,new Vector3(1,0,0),0.8f,world);
-            Check(p.y>=0.199f&&p.x<=4.801f,"Repeatedly bouncing twig stays above ground and outside wall over many steps");
-            p=new Vector3(5.1f,0.05f,0);v=new Vector3(3,-1,0);
-            DebrisMotion.Step(ref p,ref v,0.2f,0.02f,new Vector3(1,0,0),0.5f,world);
-            Check(p.x<=4.801f&&p.y>=0.199f,"Initial overlaps are repaired instead of passing through geometry");
-            float previous=p.x;DebrisMotion.Step(ref p,ref v,0.2f,0,new Vector3(1,0,0),1,world);Check(p.x==previous,"Paused debris does not move");
-            GameObject root=new GameObject("QueryTest");new DebrisWorld(root);SphereCollider probe=root.GetComponentsInChildren<SphereCollider>(true)[0];
-            Check(!probe.enabled&&probe.isTrigger,"Collision query shape cannot generate damaging native contacts");
+            Vector3 p = new Vector3(0,1,0), v = Vector3.zero;
+            int queries = Physics.Raycasts;
+            for(int i=0;i<500;i++) DebrisMotion.Step(ref p,ref v,.02f,Vector3.forward,1);
+            Check(p.y<0 && p.z>0,"Cosmetic sticks follow gravity and wind through surfaces without collision");
+            Check(v.magnitude<=DebrisMotion.MaxSpeed+.001f && Physics.Raycasts==queries,"Wind motion is bounded and makes no physics queries");
+            Vector3 old=p;
+            foreach(float dt in new[]{0f,-1f,.2f,float.NaN,float.PositiveInfinity}) DebrisMotion.Step(ref p,ref v,dt,Vector3.forward,1);
+            Check(p.x==old.x&&p.y==old.y&&p.z==old.z,"Paused and invalid time cannot advance cosmetic sticks");
         }
     }
 }

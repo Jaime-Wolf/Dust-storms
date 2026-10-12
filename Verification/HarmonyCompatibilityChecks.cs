@@ -9,11 +9,34 @@ namespace ApocaDustStorm
     {
         private static int count;
         private static void Check(bool ok, string detail) { count++; if (!ok) throw new Exception(detail); }
+        private static void OriginChecks(Harmony harmony)
+        {
+            Plugin.Active=true;StormRunner.View=new GameObject("Origin fixture camera").Add<Camera>();
+            StormRunner.OriginAnchor=new GameObject("Origin fixture player").transform;
+            StormRunner.OriginAnchor.position=new Vector3(1050,0,200);
+            StormRunner.Model.Begin(1000,200,0,420,90,75,9);StormRunner.Model.Tick(40);
+            double before=StormRunner.Model.SignedDistance(1050,200);
+            Type[] patches={typeof(StormOriginPatch),typeof(StormAdvancedOriginPatch),typeof(StormNewOriginPatch)};
+            FloatingOrigin[] fixtures={new GameObject("Origin").Add<FloatingOrigin>(),new GameObject("Advanced").Add<FloatingOriginAdvanced>(),new GameObject("New").Add<FloatingOriginNew>()};
+            for(int i=0;i<fixtures.Length;i++)
+            {
+                harmony.Patch(AccessTools.Method(fixtures[i].GetType(),"LateUpdate"),prefix:new HarmonyMethod(patches[i],"Prefix"),postfix:new HarmonyMethod(patches[i],"Postfix"));
+                fixtures[i].Anchor=StormRunner.OriginAnchor;fixtures[i].Delta=new Vector3(-1000,0,1000);
+                int shifts=StormRunner.OriginShifts;
+                AccessTools.Method(fixtures[i].GetType(),"LateUpdate").Invoke(fixtures[i],null);
+                Check(StormRunner.OriginShifts==shifts+1,"Real Harmony origin prefix/postfix shares state exactly once: "+i);
+                Vector3 position=StormRunner.OriginAnchor.position;
+                Check(Math.Abs(StormRunner.Model.SignedDistance(position.x,position.z)-before)<0.00001,"Native translation preserves sampled front distance: "+i);
+            }
+            StormRunner.Model.Reset();StormRunner.OriginAnchor=null;
+        }
         private static void Main()
         {
             Harmony storm = new Harmony(Plugin.GUID), npc = new Harmony("checked.npcai.brain");
             try
             {
+                OriginChecks(storm);
+                BrownoutHarmonyChecks.Run(storm,Check);
                 GameObject player = new GameObject("Player"); player.Add<Rigidbody>();
                 PlayMakerFSM hp = player.Add<PlayMakerFSM>(); hp.FsmName = "Health"; hp.ActiveStateName = "playerHealth";
                 player.Add<PlayMakerFSM>().FsmName = "InCar";
@@ -77,6 +100,14 @@ namespace ApocaDustStorm
                 Time.frameCount++;fog.OnRenderImage();Check(fog.FrustumResults[0].z==10,"Real Harmony cannot reuse a stale fog pose on a later frame");
                 view.UseRenderedPose=true;StormView.Capture(view);Plugin.Active=false;fog.OnRenderImage();
                 Check(fog.FrustumResults[0].z==10,"Disabled storms restore native transform-based fog rays");Plugin.Active=true;view.UseRenderedPose=false;
+                GameObject lizard=new GameObject("Lizard_Dead");lizard.IsPrefab=true;lizard.Add<Rigidbody>();
+                foreach(string marker in new[]{"Food","ID","ItemName"})lizard.Add<PlayMakerFSM>().FsmName=marker;
+                WindblownLizards.Reset();
+                storm.Patch(AccessTools.Method(typeof(CreateObject),"OnEnter"),prefix:new HarmonyMethod(typeof(WindblownLizardPrefabPatch),"Prefix"));
+                CreateObject create=new CreateObject{gameObject=new FsmGameObject{Value=lizard}};create.OnEnter();
+                Check(create.NativeCalls==1,"Real Harmony prefab observation leaves native object creation running");
+                Check(ReferenceEquals(typeof(WindblownLizards).GetField("prefab",System.Reflection.BindingFlags.NonPublic|System.Reflection.BindingFlags.Static).GetValue(null),lizard),"Real Harmony captures the native edible lizard asset reference");
+                WindblownLizards.Reset();
                 storm.UnpatchSelf(); action.DoSetVelocity();
                 Check(pursuer.GetComponent<Rigidbody>().velocity.z == 10, "Removing storm patches restores original NPCAI movement");
                 sleeper.SetState("SleepInCar");timeline.DoMethodCall();

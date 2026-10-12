@@ -1,72 +1,15 @@
-# ApocaDustStorm 0.1.29 verification
+# ApocaDustStorm 0.1.44 verification
 
-Prepared October 9, 2026. Adds covered boat POI hulls to structural shelter. The old blanket wreck-name exclusion rejected the native shipwreck_* geometry and its Wreck_* ancestors. The exception now follows only the actual hull collider hierarchy; unrelated car wrecks, POI props and vegetation are still excluded. Existing structural probes, cadence, collider cache, exposure/sleep/recovery rules and effects are retained.
+The author confirmed the latest build working in game after testing storm visuals, post-storm lighting recovery and the five-second entry shake. The release packages reuse the exact tested 0.1.44 production DLLs; only packaging and documentation were promoted for publication.
 
-- Release and dev compile against the installed game libraries without compiler warnings.
-- 234 model assertions, 470 simulated runtime assertions and 25 controlled installed-Harmony assertions pass: 729 total. The Harmony fixture compilation emits its existing unassigned test-double-field warning; production compilation does not.
-- 49 boat assertions cover 28 observed native prefab collider paths, runtime clone wrappers, cached classification, player damage and movement protection, cab under cover, exposure on exit, open decks, lone hull walls, unrelated props, triggers, disabled/dynamic collision, actor ownership, driveable vehicles and case-insensitive naming.
-- The new boat regression fails against the original 0.1.28 StormShelter at its first covered native hull, and passes with this fix. The cache check performs 200 repeated queries without new hierarchy name reads or Transform.Find calls.
-- Release/dev inspection passes: testing hotkeys remain absent from release and present in dev, and all 316 shared gameplay methods are identical between variants.
-- Full native compatibility inspection does NOT pass with the currently installed optional NPCAI: it reports "Optional NPCAI command layout changed." The original 0.1.28 binary reproduces the same failure, and StormAIMovement.cs is unchanged. This is a separate compatibility issue; controlled Harmony fixtures do not prove compatibility with that installed version. No claim of a fully passing native inspection is made.
+- 335 model + 754 controlled runtime + 39 real-Harmony fixture assertions pass: 1128 total. Re-run during release preparation.
+- Native inspection passes with -SkipOptionalNpc: all 16 Harmony targets exist. The optional NPCAI adapter is unchanged and has a known installed-layout mismatch; its compatibility is not claimed.
+- Normal/dev inspection passes: 474 shared gameplay methods match. Normal has no preview fields, bindings, test HUD or test-key calls. Dev retains F8/N and saved custom bindings. Both retain the original plugin identity.
+- Both production variants previously compiled against installed game dependencies without warnings. The Harmony test fixtures emit two unused-field warnings; those warnings are confined to test doubles.
+- The 0.1.44 performance preservation guard passed against the preserved 0.1.39 baseline with -LightingRecovery: 71 protected root methods and local particle construction/fog palette remain unchanged, apart from the three deliberate StormLighting.Scan/Recover/Clear exceptions.
+- Lighting recovery uses current native Azure ambient inputs once fully calm, with at most four clean sky-light requests around 0/1/3/6 seconds. No mod ambient-probe assignment or idle refresh loop. Current day/night, invalid/disabled controllers and active render scopes are guarded.
+- Installation ZIPs contain exactly ApocaDustStorm/{ApocaDustStorm.dll,icon.png,README.md,LICENSE.md}. The icon is 128x128. Source/verification remain separate and exclude dependency DLLs, extracted assets, saves, decompiled game code and native inspection dumps.
 
-Evidence: Verification/0.1.29-check-results.txt, 0.1.29-harmony.txt, 0.1.29-native-release.txt, 0.1.29-native-dev.txt and 0.1.29-variants.txt. Native metadata research and baseline failure logs stay in the active workspace work/dust-boat-shelter-0.1.29 folder. No native assets or game code are distributed.
+The checks do not simulate Unity GPU rendering or PhysX. No benchmarked FPS improvement or general compatibility guarantee is claimed. The retained optional NPCAI adapter mismatch is separate from the tested native player/camera/weather behavior.
 
-The boat geometry tests simulate ray hits; actual Unity mesh collision and in-game roof coverage still need testing. Enter a covered boat interior during hazardous dust and check the shelter icon and stopped damage; step onto an open deck/outside and confirm exposure returns within the usual quarter-second cadence.
-
-Player and installable dev ZIPs contain only ApocaDustStorm/ApocaDustStorm.dll and README.md. The separate Developer ZIP contains source/verification and licensing, without binaries. Local 0.1.28 baseline and previous archives are retained. Version 0.1.29 is the boat-shelter release. Live installation and boat coverage still need user testing.
-
-## Historical 0.1.28 verification notes
-
-# ApocaDustStorm 0.1.28 verification
-
-Prepared October 8, 2026. Adds only a short yellow pulse to the native player health label/number after actual storm health loss. It lasts 0.6 seconds, has a two-second trigger interval and uses the existing Exposure indicators setting. Native health values, exposure rate, shelter, sleep and protection rules are retained.
-
-## 0.1.28 validation
-
-- Release and dev compile successfully against installed game/loader/dependency libraries, with no compiler warnings.
-- 234 model, 421 simulated runtime and 25 installed-Harmony controlled-fixture assertions passed: **680 total**, including 19 new health-pulse assertions.
-- Health-pulse cases cover actual outdoor/cab health loss, fade/cooldown, cached HUD binding, native transparency, other-mod color ownership, pause/disable/reset, hidden HUD, shelter, zero damage/indicators and time jumps.
-- Both native inspections pass. Release testing controls remain compiled out; F8/N remain in dev. The 316 shared gameplay method bodies and literal data match between variants.
-- Read-only inspection of the current installed game bundle confirms the two native Text paths: Canvas/SurvivalCanvas/HealthLable and its HealthText child. No screen rectangle guess or replacement UI is used. HUD lookups happen only while a pulse is active and missing references retry at most once per second.
-- StormRunner's existing LateUpdate lighting recovery is retained; the pulse runs afterward. Actual damage triggers it from PlayerStormHazards.Tick only after a real health decrease. Pause, player/session reset and disabled indicators restore only the mod's own tint.
-
-Evidence is in Verification/0.1.28-check-results.txt, 0.1.28-harmony.txt, 0.1.28-native-release.txt, 0.1.28-native-dev.txt and 0.1.28-variants.txt. Source and verification are in a separate Developer archive; the release/dev install ZIPs contain only the mod DLL and README. The 0.1.27 source/build baseline is retained under Backups/ApocaDustStorm-0.1.27-before-health-flash-0.1.28.
-
-This update is prepared locally, without game installation or external publishing. The latest previously published GitHub version remains 0.1.27. In-game test: compare the pulse during actual outdoor and cab damage, then enter shelter and pause/disable; confirm native text remains readable and the pulse restores its normal color. No damage should occur from testing sleep or clock jumps.
-
-## Previous 0.1.27 performance verification
-
-Prepared October 8, 2026. This update addresses repeated shelter raycasts, scene searches, camera discovery, NPC hierarchy work and per-render allocations. The previously tested storm appearance, sounds, hazard values and native lighting recovery remain the baseline. In-game performance and visual testing of 0.1.27 is still pending.
-
-## Performance changes
-
-Player shelter queries run at four Hz during storms; normal movement does not bypass that limit. Cab entry/exit, pause resumption, clock jumps and teleports over 100 m force a fresh result. Crossing ordinary shelter geometry is detected on the next scheduled query, within 0.25 seconds. Full-protection calm weather needs no shelter queries; worn vehicle protection uses one Hz so proper-shelter recovery still works after a storm.
-
-Collider classification is cached for five seconds, invalidated immediately on direct reparenting and bounded to 2048 entries. Live trigger, enabled, dynamic-rigidbody and actor-descendant exclusions precede the cache. Scene cleanup and storm start clear it. Probe lengths, recognized shelter names and unnamed roof/wall rules are retained.
-
-Full-scene weather/FSM/light discovery occurs once per scene. Storm starts refresh late-created lighting/Azure assets; entering a different vehicle refreshes its local headlights. The FSM enable hook observes the native storm switch. Camera discovery is cached, with live enabled-state checks for view switching, owner/parent/scene invalidation and throttled missing-camera retries.
-
-NPC movement hooks return before name/eligibility work in calm weather. During a storm they cache eligibility and share a FIFO budget of two shelter queries per rendered frame. Recurring checks have staggered deadlines. Newly queued actors retain native movement until their first result, and no AI health writes were added.
-
-Fog snapshots, lighting arrays and Azure material/global buffers are reused while capturing current native values on every draw. Nested render passes retain their outer ownership and restoration contract. The notice style and compass Canvas are cached; HUD repaint no longer searches for the Canvas.
-
-## Automated validation
-
-- 234 pure model assertions, 402 simulated runtime assertions and 25 installed-Harmony controlled fixture assertions passed: 661 total.
-- Runtime checks include 38 new call-count, cache invalidation and buffer-reuse assertions.
-- Both release and dev compile against installed game/loader/dependency references and pass native target/rendering/hazard inspection, including the installed NPCAI movement layouts.
-- Release/dev inspection confirms no test-key fields/bindings/handlers in release, F8/N in dev, and 305 matching shared gameplay method bodies plus matching literal arrays.
-- All eleven native Harmony targets and both optional NPCAI targets remain valid. Native ambient-probe ownership, one guarded GI recovery, interrupted render cleanup and ImageEffectOpaque pass 0 are retained.
-
-See Verification/0.1.27-check-results.txt and PerformanceRuntimeChecks.cs for measured simulation counters. These tests do not simulate Unity rendering, PhysX or live frame times.
-
-## Packaging and saved state
-
-Release: Releases/PluginFolder/ApocaDustStorm-0.1.27.zip. Installable dev: Releases/PluginFolder/ApocaDustStorm-0.1.27-Dev.zip. Each ZIP contains exactly ApocaDustStorm/ApocaDustStorm.dll and ApocaDustStorm/README.md. Copy the folder into BepInEx/plugins, replacing the previous variant; install only one variant. Source and original verification fixtures are in a separate Developer archive; no game binaries/assets or native inspection dumps are included there.
-
-The saved 0.1.26 project baseline is backed up before promotion. Previous release archives are retained. Version 0.1.27 is prepared locally only: the existing GitHub 0.1.26 release has not been changed. No game install, live configuration edit, camera/gearbox modification or external publication was performed.
-
-## In-game retest
-
-Check clear-weather movement/driving, storm driving in first/chase view, view switching and vehicle transitions, shelter entry/exit, protection recovery after clearing, exposed/sheltered sleep, a group of NPCs, pause/scene reload, and day/night lighting after the storm. Compare frame times in the same scene and camera, with the same other mods, against 0.1.26.
-
+Run Verification/test.ps1, Verification/harmony-compat.ps1, Verification/inspect-build.ps1 -SkipOptionalNpc and Verification/check-variants.ps1 after building both variants. Optional compiled preservation comparison requires your own previous mod DLL via Verification/performance-build.ps1 -BaselinePath <0.1.39 mod DLL> -LightingRecovery; that historical binary is not bundled with the source.

@@ -19,10 +19,10 @@ namespace ApocaDustStorm
             Check(storm.Intensity(1000, -500) > 0 && storm.Intensity(1000, -500) < 0.15, "Early approach remains light before heavy dust");
             storm.Tick(70); Check(storm.Intensity(1000, -500) > 0.94, "Ninety-second build reaches heavy dust");
             Near(storm.OriginX, 1000, "Origin stays fixed"); Near(storm.OriginZ, -500, "Origin Z stays fixed");
-            Near(storm.Intensity(10000, 10000), storm.Intensity(1000, -500), "Driving far away cannot escape worldwide storm");
-            Near(storm.Intensity(-1000000, 1000000), storm.Intensity(1000, -500), "World coverage has no distant radial boundary");
-            Near(storm.Intensity(1000, -500 + 1700), storm.Intensity(1000, -500), "Old regional edge has no visibility change");
-            Near(storm.Intensity(1000, -500 - 10000), storm.Intensity(1000, -500), "Upwind travel has the same storm lifecycle");
+            Check(storm.Intensity(10000, -500) < 0.03, "Ahead of the moving wall retains advance dust");
+            Check(storm.Intensity(-1000000, 1000000) > 0.94, "Behind the wall has no distant radial boundary");
+            Check(storm.Intensity(1000, 1000000) > 0.94, "Crosswind world coverage stays heavy after arrival");
+            Check(storm.Intensity(-9000, -500) > 0.94, "Upwind travel stays in the passed storm");
             double paused = storm.Age;
             storm.Tick(0); storm.Tick(-5); storm.Tick(double.NaN); storm.Tick(double.PositiveInfinity);
             Near(storm.Age, paused, "Paused or invalid time does not advance weather");
@@ -90,6 +90,7 @@ namespace ApocaDustStorm
             storm.Begin(0,0,0,420,90,75,7);double previousGust=storm.Gust(0,0),gustChange=0;
             for(int i=0;i<2000;i++){storm.Tick(0.016);double g=storm.Gust(0,0);gustChange=Math.Max(gustChange,Math.Abs(g-previousGust));previousGust=g;}
             Check(gustChange<0.02,"Stronger gusts remain smooth");
+            HaboobChecks.Run(Check);
             DirectionAndDustChecks();
             ClockAndDurationChecks();
             HorizonAndSoundChecks();
@@ -106,6 +107,16 @@ namespace ApocaDustStorm
             Near(DistanceFogMath.Opacity(depthStart+Math.Log(20)/depthDensity,depthDensity),0.95,"Unsupported distant surfaces receive the same opaque dust coverage");
             Check(double.IsInfinity(DistanceFogMath.Start(0))&&double.IsInfinity(DistanceFogMath.Start(double.NaN)),"Absent or invalid density cannot produce an artificial far fog wall");
             Check(DistanceFogMath.FarDistance(3000,60,1.6)>4000,"Radial far coverage includes screen corners beyond axial far clip");
+            foreach(double density in new[]{0.001,0.01,0.125,0.5}) foreach(double night in new[]{0.0,0.25,0.5,1.0})
+            {
+                double start=DistanceFogMath.CorrectionStart(density,night);
+                Near(DistanceFogMath.CorrectionOpacity(start,density,night),0,"Night correction begins transparently");
+                Near(DistanceFogMath.CorrectionOpacity(2*DistanceFogMath.Start(density),density,night),0.95,"Night transition retains the dense-distance endpoint");
+                Check(start>=DistanceFogMath.Start(density)*0.666666&&DistanceFogMath.CorrectionDensity(density,night)<=density,"Broader night correction retains a clear near-distance zone");
+            }
+            Near(DistanceFogMath.CorrectionOpacity(depthStart+5,depthDensity,0),DistanceFogMath.Opacity(depthStart+5,depthDensity),"Day correction is numerically unchanged");
+            Check(DistanceFogMath.CorrectionDensity(depthDensity,1)==depthDensity*0.75,"Night correction reduces onset slope by 25 percent");
+            Check(DistanceFogMath.CorrectionOpacity(100,double.NaN,1)==0&&DistanceFogMath.CorrectionOpacity(100,double.PositiveInfinity,1)==0&&DistanceFogMath.CorrectionOpacity(100,0,1)==0,"Invalid density cannot introduce a correction band");
             double radialError=0;
             for(int i=0;i<360;i++){double a=i*Math.PI/180,x=120*Math.Cos(a),z=120*Math.Sin(a);radialError=Math.Max(radialError,Math.Abs(DistanceFogMath.Opacity(Math.Sqrt(x*x+z*z),depthDensity)-DistanceFogMath.Opacity(120,depthDensity)));}
             Check(radialError<0.000001,"Distant fog coverage is invariant under camera/world yaw");

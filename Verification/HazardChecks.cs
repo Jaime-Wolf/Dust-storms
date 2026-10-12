@@ -56,16 +56,16 @@ namespace ApocaDustStorm
             { double gain = StormHazardModel.MovementGain(i / 1000.0, 1, 1, 1); maximumStep = Math.Max(maximumStep, Math.Abs(previous - gain)); previous = gain; }
             check(maximumStep < 0.001, "Movement resistance builds smoothly with the existing storm transition");
             WindLootSchedule loot = new WindLootSchedule();
-            check(WindLootSchedule.RollWait(0) == 90 && WindLootSchedule.RollWait(1) == 180, "Occasional edible lizards are spaced ninety to one hundred eighty seconds apart");
+            check(WindLootSchedule.RollWait(0) == 45 && WindLootSchedule.RollWait(1) == 90, "Occasional edible lizards are spaced forty-five to ninety seconds apart");
             bool spawn = false;
             for (int i = 0; i < 2000; i++) spawn |= loot.Tick(0.1, false, delegate { return 0; });
             check(!spawn && loot.Count == 0, "Calm/sheltered periods cannot produce lizards");
-            for (int i = 0; i < 899; i++) spawn |= loot.Tick(0.1, true, delegate { return 0; });
+            for (int i = 0; i < 199; i++) spawn |= loot.Tick(0.1, true, delegate { return 0; });
             check(!spawn, "A new storm cannot immediately dispense food");
             for (int i = 0; i < 5; i++) spawn |= loot.Tick(0.1, true, delegate { return 0; });
-            check(spawn, "Heavy outdoor weather eventually permits an occasional lizard"); loot.Spawned();
-            spawn = false; for (int i = 0; i < 905; i++) spawn |= loot.Tick(0.1, true, delegate { return 0; });
-            check(spawn, "Second lizard requires another full heavy-weather wait"); loot.Spawned();
+            check(spawn, "Visible storm dust eventually permits an occasional lizard"); loot.Spawned();
+            spawn = false; for (int i = 0; i < 455; i++) spawn |= loot.Tick(0.1, true, delegate { return 0; });
+            check(spawn, "Second lizard requires another full randomized storm wait"); loot.Spawned();
             spawn = false; for (int i = 0; i < 5000; i++) spawn |= loot.Tick(0.2, true, delegate { return 0; });
             check(!spawn && loot.Count == 2, "Per-storm food limit prevents repeated food farming"); loot.Reset();
             check(loot.Count == 0 && !loot.Tick(900, true, delegate { return 0; }), "Storm reset and sleep-sized time step do not cause a spawn burst");
