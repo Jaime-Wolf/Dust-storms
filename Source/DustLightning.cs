@@ -13,6 +13,8 @@ namespace ApocaDustStorm
         private static GameObject owner;
         private static AudioSource source;
         private static AudioClip[] clips;
+        private static int preparedClips;
+        private static bool pendingSound, warnedAudio;
         private static LineRenderer[] arcs;
         private static Material material;
         private static Light strikeLight;
@@ -22,6 +24,23 @@ namespace ApocaDustStorm
         internal static float Flare { get { return Plugin.DustLightningEnabled ? (float)model.Pulse * Mathf.Clamp(Plugin.Value(Plugin.FlashBrightness, 1), 0, 2) : 0; } }
         internal static float WindGain { get { return Plugin.DustLightningEnabled && audibleDischarge && Plugin.Value(Plugin.DischargeVolume, 1) > 0 ? (float)model.WindGain : 1; } }
         private static float Range(float min, float max) { return min + (float)random.NextDouble() * (max - min); }
+        private static void PrepareAudio()
+        {
+            if (preparedClips == 3) return;
+            float[][] samples;
+            if (!DischargeSamples.TryGet(out samples))
+            {
+                if (!warnedAudio && DischargeSamples.Failure != null)
+                { warnedAudio = true; Plugin.Log.LogWarning("Lightning audio preparation failed; visual strikes remain available: " + DischargeSamples.Failure.Message); }
+                return;
+            }
+            if (clips == null) clips = new AudioClip[3];
+            // Upload at most one clip per Tick, before strikes need it.
+            AudioClip clip = AudioClip.Create("ApocaDustStorm.LightningCrack" + preparedClips,
+                samples[preparedClips].Length, 1, DischargeSound.SampleRate, false);
+            clips[preparedClips] = clip; clip.hideFlags = HideFlags.HideAndDontSave;
+            clip.SetData(samples[preparedClips], 0); preparedClips++;
+        }
         private static void Ensure()
         {
             if (owner != null) return;
@@ -38,13 +57,6 @@ namespace ApocaDustStorm
                 strikeLight.shadows = LightShadows.Soft; strikeLight.shadowStrength = 0.85f;
                 strikeLight.shadowResolution = LightShadowResolution.Medium;
                 strikeLight.shadowBias = 0.025f; strikeLight.shadowNormalBias = 0.25f;
-                clips = new AudioClip[3];
-                for (int i = 0; i < clips.Length; i++)
-                {
-                    float[] samples = DischargeSound.Generate(3118 + i * 97);
-                    clips[i] = AudioClip.Create("ApocaDustStorm.LightningCrack" + i, samples.Length, 1, DischargeSound.SampleRate, false);
-                    clips[i].hideFlags = HideFlags.HideAndDontSave; clips[i].SetData(samples, 0);
-                }
                 Shader shader = Shader.Find("Sprites/Default");
                 if (shader == null || !shader.isSupported) shader = Shader.Find("UI/Default");
                 if (shader == null || !shader.isSupported) return; // Local light and sound still work.
@@ -68,7 +80,7 @@ namespace ApocaDustStorm
         private static void Event(Camera view)
         {
             Ensure();
-            audibleDischarge = source != null && Plugin.Value(Plugin.DischargeVolume, 1) > 0;
+            audibleDischarge = source != null && preparedClips == 3 && Plugin.Value(Plugin.DischargeVolume, 1) > 0;
             // Roll once, then place from the final rendered camera on PreCull.
             // Chase cameras can override matrices without moving their transform.
             favourView = random.NextDouble() < 0.75;
@@ -150,15 +162,20 @@ namespace ApocaDustStorm
         }
         internal static void Tick(Camera view, float dt, float strength, bool stormActive, bool preview, bool clockSkipped)
         {
+            if (Plugin.DustLightningEnabled && view != null) PrepareAudio();
             if (!Plugin.DustLightningEnabled || view == null || strength <= 0.001f) { Suspend(); model.Reset(); return; }
             if (clockSkipped) { Suspend(); model.Reset(); return; }
             bool triggered = model.Step(dt, stormActive && strength >= 0.70f, random.NextDouble);
             if (preview && strength >= 0.15f && model.Preview(random.NextDouble())) triggered = true;
             if (triggered) Event(view);
             float volume = Mathf.Clamp(Plugin.Value(Plugin.DischargeVolume, 1), 0, 2);
-            if (volume <= 0) { audibleDischarge = false; if (source != null) source.Stop(); }
-            if (model.TakeSound() && source != null && volume > 0)
+            if (model.TakeSound()) pendingSound = volume > 0;
+            if (volume <= 0) { pendingSound = false; audibleDischarge = false; if (source != null) source.Stop(); }
+            if (pendingSound && source != null && preparedClips == 3 && volume > 0)
+            {
+                pendingSound = false; audibleDischarge = true;
                 source.PlayOneShot(clips[random.Next(clips.Length)], 0.85f * volume * Range(0.85f, 1));
+            }
         }
         internal static void PreCull(Camera camera)
         {
@@ -181,7 +198,7 @@ namespace ApocaDustStorm
             if (strikeLight != null) { strikeLight.enabled = false; strikeLight.intensity = 0; }
             if (arcs != null) foreach (LineRenderer line in arcs) if (line != null) line.enabled = false;
         }
-        internal static void Suspend() { pendingPlacement = false; audibleDischarge = false; model.CancelPulse(); Hide(); if (source != null) source.Stop(); }
+        internal static void Suspend() { pendingSound = false; pendingPlacement = false; audibleDischarge = false; model.CancelPulse(); Hide(); if (source != null) source.Stop(); }
         internal static void Clear()
         {
             Suspend(); model.Reset();
@@ -189,6 +206,7 @@ namespace ApocaDustStorm
             if (clips != null) foreach (AudioClip clip in clips) if (clip != null) UnityEngine.Object.Destroy(clip);
             if (material != null) UnityEngine.Object.Destroy(material);
             owner = null; source = null; clips = null; arcs = null; material = null; strikeLight = null;
+            preparedClips = 0;
         }
     }
 }

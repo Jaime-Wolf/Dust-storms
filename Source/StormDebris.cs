@@ -13,16 +13,14 @@ namespace ApocaDustStorm
             internal float Radius, Scale, Age, Life;
         }
         private readonly Body[] bodies = new Body[22];
-        private readonly DebrisWorld world;
         private readonly System.Random random = new System.Random();
         private readonly RaycastHit[] hits = new RaycastHit[24];
         private float twigBudget;
         internal StormDebris(GameObject root, Material wood, Mesh branch)
         {
-            world = new DebrisWorld(root);
             for (int i = 0; i < bodies.Length; i++)
             {
-                GameObject go = new GameObject("Colliding twig"); go.hideFlags = HideFlags.HideAndDontSave;
+                GameObject go = new GameObject("Windblown twig"); go.hideFlags = HideFlags.HideAndDontSave;
                 go.transform.SetParent(root.transform, false); go.AddComponent<MeshFilter>().sharedMesh = branch;
                 MeshRenderer renderer = go.AddComponent<MeshRenderer>(); renderer.sharedMaterial = wood;
                 renderer.shadowCastingMode = ShadowCastingMode.Off; renderer.receiveShadows = false;
@@ -71,9 +69,6 @@ namespace ApocaDustStorm
             body.Velocity = wind * Range(7, 12) + Vector3.up * Range(0.3f, 1.0f);
             body.Spin = new Vector3(Range(-90, 90), Range(-130, 130), Range(-90, 90));
             body.Age = 0; body.Life = Range(7, 12);
-            // Avoid spawning inside the cab/hood, a wall, or a part near the camera.
-            DebrisHit hit; Vector3 correction;
-            if (world.Penetration(body.Position, body.Radius, out correction, out hit)) return;
             body.Object.transform.position = body.Position;
             body.Object.transform.rotation = Quaternion.Euler(Range(0, 360), Range(0, 360), Range(0, 360));
             body.Object.transform.localScale = Vector3.zero; body.Object.SetActive(true);
@@ -88,7 +83,7 @@ namespace ApocaDustStorm
                 if (!body.Object.activeSelf) continue;
                 body.Age += Time.fixedDeltaTime;
                 if (body.Age >= body.Life) { body.Object.SetActive(false); continue; }
-                DebrisMotion.Step(ref body.Position, ref body.Velocity, body.Radius, Time.fixedDeltaTime, wind, localGust, world);
+                DebrisMotion.Step(ref body.Position, ref body.Velocity, Time.fixedDeltaTime, wind, localGust);
                 body.Object.transform.Rotate(body.Spin * Time.fixedDeltaTime, Space.World);
             }
         }

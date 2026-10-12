@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.AzureSky;
 using UnityEngine.Rendering;
 
 namespace ApocaDustStorm
@@ -10,7 +11,11 @@ namespace ApocaDustStorm
     {
         private static Light[] directional;
         private static Light[] headlights;
+        internal static Light[] HeadlightSources { get { return headlights; } }
         private static bool needsEnvironmentRefresh;
+        private static AzureEnvironmentController environment;
+        private static int recoveryAttempts;
+        private static float nextRecovery;
         private static readonly string[] skyColors = { "_SkyColor", "_HorizonColor", "_SunColor", "_MoonColor",
             "_CloudColor", "_FlatCloudsLightColor", "_FlatCloudsAmbientColor" };
         private static readonly string[] skyFloats = { "_StarsIntensity", "_CloudsExposure" };
@@ -28,6 +33,7 @@ namespace ApocaDustStorm
                 found.Add(RenderSettings.sun);
             directional = found.ToArray();
             headlights = vehicleSpots.ToArray();
+            environment = UnityEngine.Object.FindObjectOfType<AzureEnvironmentController>();
         }
         internal static void RefreshHeadlights(Transform vehicle)
         {
@@ -40,17 +46,40 @@ namespace ApocaDustStorm
         }
         internal static bool Recover(bool calm)
         {
-            // Never bake the temporary dusty sky, or overwrite a live camera
-            // scope. LateUpdate calls this only after the final clearing fade.
-            if (!calm || !needsEnvironmentRefresh || StormFog.HasOverrides) return false;
-            needsEnvironmentRefresh = false;
+            // Unity queues environment readbacks. A single request can be lost
+            // or followed by an older dusty result, so retry at 0, 1, 3 and 6s.
+            // Never capture a temporary sky or request updates every calm frame.
+            if (!calm || !needsEnvironmentRefresh || StormFog.HasOverrides ||
+                !Apocasetter.GameMenu.InGame || Time.unscaledTime < nextRecovery) return false;
+            RestoreNativeAmbient();
+            recoveryAttempts++;
+            nextRecovery = Time.unscaledTime + recoveryAttempts;
+            needsEnvironmentRefresh = recoveryAttempts < 4;
             try { DynamicGI.UpdateEnvironment(); return true; }
             catch (Exception e) { Plugin.Log.LogWarning("Native ambient refresh skipped: " + e.Message); return false; }
         }
+        private static bool Finite(float value) { return !Single.IsNaN(value) && !Single.IsInfinity(value); }
+        private static bool Finite(Color value)
+        { return Finite(value.r) && Finite(value.g) && Finite(value.b) && Finite(value.a); }
+        private static void RestoreNativeAmbient()
+        {
+            // These public fields are the native Azure controller's live inputs,
+            // updated by its day/night linker. Never reuse a pre-storm snapshot.
+            if (environment == null || !environment.isActiveAndEnabled ||
+                !Finite(environment.environmentIntensity) || environment.environmentIntensity < 0 ||
+                !Finite(environment.environmentAmbientColor) || !Finite(environment.environmentEquatorColor) ||
+                !Finite(environment.environmentGroundColor)) return;
+            RenderSettings.ambientIntensity = environment.environmentIntensity;
+            RenderSettings.ambientLight = environment.environmentAmbientColor;
+            RenderSettings.ambientSkyColor = environment.environmentAmbientColor;
+            RenderSettings.ambientEquatorColor = environment.environmentEquatorColor;
+            RenderSettings.ambientGroundColor = environment.environmentGroundColor;
+        }
         internal static void Clear(bool recover = false)
         {
-            if (recover) Recover(true);
+            if (recover) { nextRecovery = Time.unscaledTime; Recover(true); }
             directional = null; headlights = null; needsEnvironmentRefresh = false;
+            environment = null; recoveryAttempts = 0; nextRecovery = 0;
         }
         private static bool IsVehicleSpot(Light light)
         {
@@ -107,7 +136,7 @@ namespace ApocaDustStorm
                 // Retain diffuse daylight instead of turning a noon storm into night.
                 float amount = Amount(strength), directFactor = 1 - 0.65f * amount;
                 float ambientFactor = 1 - 0.45f * amount, skyFactor = SkyFactor(strength);
-                if (amount > 0) needsEnvironmentRefresh = true;
+                if (amount > 0) { needsEnvironmentRefresh = true; recoveryAttempts = 0; nextRecovery = 0; }
                 float tint = 0.9f * (float)StormModel.Smooth(amount);
                 for (int i = 0; i < lights.Length; i++) if (lights[i] != null) lights[i].intensity = intensities[i] * directFactor;
                 float assist = (float)StormModel.Smooth(strength) * Mathf.Clamp(Plugin.Value(Plugin.Headlights, 1), 0, 2);

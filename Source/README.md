@@ -1,6 +1,17 @@
-# Current source - ApocaDustStorm 0.1.26
+# ApocaDustStorm 0.1.44 source
 
-These are the current original mod sources. `Plugin.cs` defines the identity, settings and version; `StormRunner.cs` coordinates weather and runtime effects. See the root [compatibility guide](../COMPATIBILITY.md) for the module map and integration boundaries, and [permissions](../LICENSE.md) for reuse rules.
+These are the original mod sources. Plugin.cs defines identity, settings and version; StormRunner.cs coordinates weather and effects. See the root compatibility guide and license for integration boundaries and reuse permissions.
 
-Build from the repository root with `Source/build.ps1 -GameDir <your game folder>`. Add `-Development` to retain F8/N testing controls. Dependencies must come from your local game/BepInEx/Apocasetter installation; none are bundled. Release/dev output folders are ignored by Git.
+On Windows, use the .NET Framework compiler and dependencies from your local Apocalypter/BepInEx/Apocasetter installation:
 
+```powershell
+$game = 'D:\Steam\steamapps\common\Apocalypter'
+& .\Source\build.ps1 -GameDir $game
+& .\Source\build.ps1 -GameDir $game -Development
+& .\Verification\test.ps1
+& .\Verification\harmony-compat.ps1 -GameDir $game
+& .\Verification\inspect-build.ps1 -GameDir $game -SkipOptionalNpc
+& .\Verification\check-variants.ps1 -GameDir $game
+```
+
+The normal DLL is written to Source/build and the optional F8/N development DLL to Source/build-dev. Install one variant only. No dependencies are bundled. Both build directories are excluded from the source repository. See ../Verification.md for results and limits; the optional NPCAI layout mismatch remains outside this update.

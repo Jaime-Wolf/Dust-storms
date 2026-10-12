@@ -1,26 +1,13 @@
-# ApocaDustStorm 0.1.29 - development build
+# ApocaDustStorm 0.1.44 - development build
 
-Installable development variant of the same worldwide dust-storm mod. It retains the gameplay and effect tuning of the release, with testing controls enabled:
+This optional installable variant has the same weather and gameplay as the normal release, with testing controls retained:
 
-Version 0.1.29 recognizes covered boat hulls as structural shelter. Open decks remain exposed. The native NPC AI movement compatibility inspection currently reports a pre-existing layout mismatch with the installed optional NPCAI version; that adapter is unchanged.
+- F8 starts a gradually approaching test storm; press again to fade it out over 30 seconds.
+- N previews cosmetic dust lightning during visible storm dust.
+- Saved custom bindings remain supported through the MODS menu. None disables a key.
 
-Version 0.1.28 adds a 0.6-second yellow pulse on the existing health label and number after actual storm health loss, at most once every two seconds. It uses Exposure indicators and preserves native HUD colors. Both variants have the same pulse; its visibility still needs an in-game test.
+Close the game and copy the ZIP's ApocaDustStorm folder into BepInEx/plugins, replacing the normal DLL. Install one variant only: normal/dev share the same plugin identity, installation path and configuration. The normal release has no testing hotkeys. The separate Developer ZIP is source/verification only.
 
-- F8 starts a gradually approaching test storm; press again to clear it over 30 seconds.
-- N previews dust lightning during visible dust when Dust lightning is enabled. A short playback cooldown applies.
-- Change the preview keys in the MODS menu under Controls; None disables a key. The former F9 default migrates to N.
+Test storms include normal exposure damage and sleep interruption. Set Player exposure damage to 0 for harmless visual testing; exposed sleep is still interrupted. Settings and ordinary random storms work in both variants. The five-second entry shake, rolling dust front, terrain blending and lighting recovery are identical to the normal build.
 
-Test storms include normal exposure and movement hazards. Set Player exposure damage to 0 if you want harmless visual testing. This does not disable exposed sleep interruption.
-
-Close the game and copy the ZIP's ApocaDustStorm folder into BepInEx/plugins in the game folder. Replace BepInEx/plugins/ApocaDustStorm/ApocaDustStorm.dll. Requires BepInEx 5 x64 and Apocasetter; dependencies are not bundled. Never install release and dev DLLs together: they share the same identity, installation path and settings file. Switching variants preserves settings. The release ignores any saved testing keys.
-
-The release ZIP has no testing hotkeys. The separately named -Developer.zip is source/verification only, not an installable dev build. Both installable archives contain only the DLL and README files.
-
-To rebuild from the source archive, run Source/build.ps1 for release or Source/build.ps1 -Development for dev. Development uses the APOCA_DEV compile symbol and writes to Source/build-dev. Verification/check-variants.ps1 checks both compiled variants after building them.
-
-Storm inspiration: Mad Max (2015). Thanks to Sawyer, creator of Apocalypter. No telemetry or network requests. Existing gearbox/camera projects remain separate; the shelved road-audio mod is not included.
-
-Archive layout: the repackaged installation ZIP opens directly to the mod's folder. Copy that folder into BepInEx/plugins. For an older ZIP that opens to a BepInEx folder, merge that folder into the game folder instead. Source and verification files are supplied separately.
-
-0.1.27 includes the shelter/discovery/camera/NPC/rendering performance changes. Automated checks passed; in-game performance testing is pending. Appearance, sounds and hazard tuning are retained.
-
+Requires BepInEx 5 x64 and Apocasetter. Native assets and dependencies are not bundled. No telemetry or networking. See README.md, COMPATIBILITY.md and LICENSE.md in the source repository for details.

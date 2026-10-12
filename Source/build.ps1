@@ -10,7 +10,7 @@ $taskCore=Join-Path $GameDir 'BepInEx\core'
 $taskCompiler=Join-Path $env:WINDIR 'Microsoft.NET\Framework64\v4.0.30319\csc.exe'
 New-Item -ItemType Directory -Path $OutputDir -Force | Out-Null
 $taskReferences=@('mscorlib.dll','System.dll','System.Core.dll','netstandard.dll','UnityEngine.dll',
- 'UnityEngine.CoreModule.dll','UnityEngine.PhysicsModule.dll','UnityEngine.InputLegacyModule.dll',
+ 'UnityEngine.TerrainModule.dll','UnityEngine.TerrainPhysicsModule.dll','UnityEngine.CoreModule.dll','UnityEngine.WindModule.dll','Unity.Postprocessing.Runtime.dll','UnityEngine.PhysicsModule.dll','UnityEngine.InputLegacyModule.dll',
  'UnityEngine.ParticleSystemModule.dll','UnityEngine.AudioModule.dll','UnityEngine.IMGUIModule.dll','UnityEngine.TextRenderingModule.dll','UnityEngine.UI.dll','UnityEngine.UIModule.dll',
  'NWH.VehiclePhysics2.dll','NWH.Common.dll','PlayMaker.dll','Assembly-CSharp.dll') | ForEach-Object {Join-Path $taskManaged $_}
 $taskReferences+=Join-Path $taskCore 'BepInEx.dll'

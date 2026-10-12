@@ -9,6 +9,15 @@ namespace ApocaDustStorm
         internal static readonly StormModel Model = new StormModel();
         private static readonly StormSchedule schedule = new StormSchedule();
         internal static float Strength, Gust;
+        private static readonly HaboobTransition transition = new HaboobTransition();
+        private static float windStrength, lightStrength, paletteStrength, gradeStrength, impactStrength;
+        private static bool phasesReady, entered;
+        private static StormVegetationWind vegetation;
+        internal static float WindStrength { get { return phasesReady ? windStrength : Strength; } }
+        internal static float LightingStrength { get { return phasesReady ? lightStrength : Strength; } }
+        internal static float PaletteStrength { get { return phasesReady ? paletteStrength : Strength; } }
+        internal static float ImpactStrength { get { return impactStrength; } }
+        internal static bool Entered { get { return entered; } }
         private static StormVisuals visuals;
         private static WindAudio audio;
         private static SandAudio sand;
@@ -21,6 +30,7 @@ namespace ApocaDustStorm
         private static GUISkin noticeSkin;
         private static readonly System.Random random = new System.Random();
         internal static Camera View { get { return view; } }
+        internal static Transform OriginAnchor { get { return player != null ? player.transform : null; } }
         internal static bool CanRender { get { return Plugin.Active && inSession && view != null; } }
         private void Update()
         {
@@ -28,7 +38,7 @@ namespace ApocaDustStorm
             {
                 // A camera that stops rendering can miss its closing callback.
                 // Camera-only overrides must never survive into a later frame.
-                StormFog.Restore();
+                StormFog.Restore(); StormEntryShake.Restore();
                 bool ingame = Plugin.Active && Apocasetter.GameMenu.InGame;
                 if (!ingame) { if (inSession || Model.Active) ClearAll(); inSession = false; return; }
                 inSession = true;
@@ -40,14 +50,14 @@ namespace ApocaDustStorm
                 StormDiscovery.EnsureScene();
                 view = SelectView();
                 StormDiscovery.BindVehicle(StormCameraCache.VehicleRoot);
-                if (player == null || view == null) { ExposureHud.Hide(); PlayerStormHazards.Suspend(); WindblownLizards.Suspend(); DustLightning.Suspend(); if (sand != null) sand.Silence(); if (audio != null) audio.Silence(); return; }
+                if (player == null || view == null) { StormEntryShake.Clear(); ExposureHud.Hide(); StormBrownout.Suspend(); if (vegetation != null) vegetation.Silence(); PlayerStormHazards.Suspend(); WindblownLizards.Suspend(); DustLightning.Suspend(); if (sand != null) sand.Silence(); if (audio != null) audio.Silence(); return; }
                 bool playing = Time.timeScale > 0 && !Apocasetter.GameMenu.Paused;
 #if APOCA_DEV
                 bool input = playing && Application.isFocused && !Apocasetter.InputBlocker.Active;
                 if (input && Plugin.PreviewKey.Value != KeyCode.None && Input.GetKeyDown(Plugin.PreviewKey.Value))
                 { if (Model.Active) { Model.Stop(); Announce("Dust storm passing"); } else Begin(true); }
 #endif
-                if (!playing) { ExposureHud.Hide(); PlayerStormHazards.Suspend(); WindblownLizards.Suspend(); DustLightning.Suspend(); if (audio != null) audio.Silence(); if (sand != null) sand.Silence(); return; }
+                if (!playing) { StormEntryShake.Clear(); ExposureHud.Hide(); if (vegetation != null) vegetation.Silence(); PlayerStormHazards.Suspend(); WindblownLizards.Suspend(); DustLightning.Suspend(); if (audio != null) audio.Silence(); if (sand != null) sand.Silence(); return; }
                 bool disabled = Plugin.FollowNativeSwitch.Value && NativeStormGuard.StormsDisabled();
                 if (!preview && (!Plugin.Automatic.Value || disabled) && Model.Active) Model.Stop();
                 float dt = Mathf.Min(Time.deltaTime, 0.2f);
@@ -63,30 +73,45 @@ namespace ApocaDustStorm
                 if (!wasActive && !Model.Active && Plugin.Automatic.Value && !disabled &&
                     schedule.Tick(dt, Plugin.Value(Plugin.MinimumCalm, 5), Plugin.Value(Plugin.Chance, 6), random.NextDouble)) Begin(false);
                 Vector3 p = player.transform.position;
-                float target = (float)Model.Intensity(p.x, p.z);
-                Strength = skipped ? target : Mathf.Lerp(Strength, target, 1 - Mathf.Exp(-dt / 3.0f));
+                HaboobFrame frame = transition.Step(Model, p, dt, skipped);
+                float target = frame.Fog, smoothing = 1 - Mathf.Exp(-dt / 3.0f);
+                Strength = skipped ? target : Mathf.Lerp(Strength, target, smoothing);
+                windStrength = skipped ? frame.Wind : Mathf.Lerp(windStrength, frame.Wind, smoothing);
+                lightStrength = skipped ? frame.Light : Mathf.Lerp(lightStrength, frame.Light, smoothing);
+                paletteStrength = skipped ? frame.Palette : Mathf.Lerp(paletteStrength, frame.Palette, smoothing);
+                gradeStrength = skipped ? frame.Grade : Mathf.Lerp(gradeStrength, frame.Grade, smoothing);
+                if (!Model.Active) { if (windStrength < 0.001f) windStrength = 0; if (lightStrength < 0.001f) lightStrength = 0; if (paletteStrength < 0.001f) paletteStrength = 0; if (gradeStrength < 0.001f) gradeStrength = 0; }
+                phasesReady = true; entered = frame.Entered; impactStrength = frame.Impact;
                 Gust = Mathf.Lerp(Gust, (float)Model.Gust(p.x, p.z), 1 - Mathf.Exp(-dt / 0.65f));
                 if (!Model.Active && Strength < 0.001f) Strength = 0;
                 PlayerStormHazards.Tick(player, dt, Strength, skipped);
+                StormEntryShake.Tick(dt, entered, skipped);
+                StormBrownout.Tick(view, gradeStrength);
                 ExposureHud.Tick(dt, Strength);
                 WindblownLizards.Tick(dt, Strength, Model, skipped);
                 AzureAtmosphere.EnsureCamera(view);
                 StormDistanceFog.EnsureCamera(view);
-                if (Model.Active || Strength > 0.001f)
+                if (Model.Active || Strength > 0.001f || WindStrength > 0.001f)
                 {
+                    if (vegetation == null) vegetation = new StormVegetationWind();
+                    vegetation.Tick(Model, WindStrength, Gust);
                     if (visuals == null) visuals = new StormVisuals();
                     if (audio == null) audio = new WindAudio();
                     if (sand == null) sand = new SandAudio();
                     visuals.Tick(view.transform.position, dt, Strength, Model);
                 }
-                else if (visuals != null) { visuals.Dispose(); visuals = null; }
+                else
+                {
+                    if (visuals != null) { visuals.Dispose(); visuals = null; }
+                    if (vegetation != null) { vegetation.Dispose(); vegetation = null; }
+                }
 #if APOCA_DEV
                 bool dischargePreview = input && Plugin.DischargeKey.Value != KeyCode.None && Input.GetKeyDown(Plugin.DischargeKey.Value);
 #else
                 bool dischargePreview = false;
 #endif
                 DustLightning.Tick(view, dt, Strength, Model.Active, dischargePreview, skipped);
-                if (audio != null) audio.Tick(Strength, Gust, dt);
+                if (audio != null) audio.Tick(WindStrength, Gust, dt);
                 if (sand != null) sand.Tick(player, Strength, Gust, dt);
             }
             catch (Exception e)
@@ -108,11 +133,22 @@ namespace ApocaDustStorm
             preview = test; schedule.Reset();
             WindblownLizards.Reset();
             Announce("Dust storm approaching from the " + Model.Source.ToString().ToLowerInvariant());
-            Plugin.Log.LogInfo("Started " + (test ? "preview" : "automatic") + " worldwide storm from " + Model.Source + "; duration " + duration.ToString("F0") + "s, build-up " + Model.BuildTime + "s, clearing " + Model.ClearTime + "s; player exposure only, no AI/part storm damage.");
+            Plugin.Log.LogInfo("Started " + (test ? "preview" : "automatic") + " world-spanning dust front from " + Model.Source + "; duration " + duration.ToString("F0") + "s, build-up " + Model.BuildTime + "s, clearing " + Model.ClearTime + "s; player exposure only, no AI/part storm damage.");
+        }
+        internal static void PreCullWall(Camera camera) { if (visuals != null) visuals.PreCullWall(camera); }
+        internal static void PostRenderWall(Camera camera) { if (visuals != null) visuals.HideWall(); }
+        internal static void ShiftOrigin(Transform anchor, Vector3 delta)
+        {
+            if (anchor == null || anchor != OriginAnchor) return;
+            Model.ShiftOrigin(delta.x, delta.z); StormView.Clear();
+            if (visuals != null) visuals.ShiftOrigin(delta);
         }
         private static void Announce(string text) { notice = text; noticeUntil = Time.unscaledTime + 8; }
         internal static void ClearAll()
         {
+            StormEntryShake.Clear();
+            transition.Reset(); phasesReady = entered = false; windStrength = lightStrength = paletteStrength = gradeStrength = impactStrength = 0;
+            StormBrownout.Clear(); if (vegetation != null) { vegetation.Dispose(); vegetation = null; }
             DustLightning.Clear(); StormHorizon.Clear(); StormDistanceFog.Clear(); StormView.Clear(); StormFog.Clear(); StormLighting.Clear(Apocasetter.GameMenu.InGame); AzureAtmosphere.Clear(); NativeStormClock.Reset(); Model.Reset(); Strength = 0; Gust = 0; preview = false;
             if (visuals != null) { visuals.Dispose(); visuals = null; }
             if (audio != null) { audio.Dispose(); audio = null; }
@@ -144,16 +180,16 @@ namespace ApocaDustStorm
         private void OnDisable() { ClearAll(); }
         private void LateUpdate()
         {
-            if (inSession) StormLighting.Recover(!Model.Active && Strength == 0);
+            if (inSession) StormLighting.Recover(!Model.Active && Strength == 0 && LightingStrength == 0);
             StormHealthFlash.Tick();
         }
         private void FixedUpdate()
         {
             try
             {
-                if (CanRender && Model.Active && Time.timeScale > 0 && !Apocasetter.GameMenu.Paused)
+                if (CanRender && (Model.Active || Strength > 0.001f || WindStrength > 0.001f) && Time.timeScale > 0 && !Apocasetter.GameMenu.Paused)
                 {
-                    VehicleWind.Tick(player, Model, Strength, Gust);
+                    VehicleWind.Tick(player, Model, WindStrength, Gust);
                     if (visuals != null) visuals.FixedTick(Strength, Gust, Model);
                 }
             }

@@ -19,7 +19,7 @@ namespace ApocaDustStorm
         private static readonly FieldInfo fogField = typeof(AzureSkyRenderController).GetField("m_fogMaterial", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
         private static Material[] cached;
         private static Material fogTemplate;
-        private sealed class OwnedEffect { internal Camera Camera; internal AzureFogScattering Effect; internal Material Material; internal DepthTextureMode Depth; }
+        private sealed class OwnedEffect { internal Camera Camera; internal AzureFogScattering Effect; internal Material Material; }
         private static readonly List<OwnedEffect> owned = new List<OwnedEffect>();
         private static readonly MethodInfo initialize = typeof(AzureFogScattering).GetMethod("Start", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
         private static void Add(List<Material> list, Material material)
@@ -44,12 +44,13 @@ namespace ApocaDustStorm
         {
             if (camera == null) return;
             AzureFogScattering existing = camera.GetComponent<AzureFogScattering>();
-            if (existing == null && fogTemplate != null)
+            if (existing == null && fogTemplate != null && StormRunner.CanRender && StormRunner.Strength >= 0.001f)
             {
-                OwnedEffect item = new OwnedEffect { Camera = camera, Material = new Material(fogTemplate), Depth = camera.depthTextureMode };
+                OwnedEffect item = new OwnedEffect { Camera = camera, Material = new Material(fogTemplate) };
                 owned.Add(item);
                 item.Effect = camera.gameObject.AddComponent<AzureFogScattering>();
                 item.Effect.fogScatteringMaterial = item.Material;
+                StormDepthRequest.Register(item.Effect); StormDepthRequest.Acquire(camera, item.Effect);
                 // Runtime-added image effects can render this frame. Start only
                 // caches camera references; initialize them before that first draw.
                 if (initialize != null) initialize.Invoke(item.Effect, null);
@@ -58,8 +59,13 @@ namespace ApocaDustStorm
             {
                 OwnedEffect item = owned[i];
                 if (item.Camera == null || item.Effect == null)
-                { if (item.Material != null) UnityEngine.Object.Destroy(item.Material); owned.RemoveAt(i); continue; }
-                item.Effect.enabled = item.Camera == camera && StormRunner.Strength >= 0.001f;
+                {
+                    StormDepthRequest.Release(item.Camera, item.Effect); StormDepthRequest.Forget(item.Effect);
+                    if (item.Material != null) UnityEngine.Object.Destroy(item.Material); owned.RemoveAt(i); continue;
+                }
+                bool active = item.Camera == camera && StormRunner.CanRender && StormRunner.Strength >= 0.001f;
+                if (active) StormDepthRequest.Acquire(item.Camera, item.Effect); else StormDepthRequest.Release(item.Camera, item.Effect);
+                item.Effect.enabled = active;
             }
         }
         internal static void Clear()
@@ -67,15 +73,14 @@ namespace ApocaDustStorm
             foreach (OwnedEffect item in owned)
             {
                 if (item.Effect != null) { item.Effect.enabled = false; UnityEngine.Object.Destroy(item.Effect); }
-                if (item.Camera != null && item.Camera.depthTextureMode == (item.Depth | DepthTextureMode.Depth))
-                    item.Camera.depthTextureMode = item.Depth;
+                StormDepthRequest.Release(item.Camera, item.Effect); StormDepthRequest.Forget(item.Effect);
                 if (item.Material != null) UnityEngine.Object.Destroy(item.Material);
             }
             owned.Clear(); cached = null; fogTemplate = null;
         }
         private static float ChangeFloat(int index, float native, float strength)
         {
-            float blend = (float)StormModel.Smooth(strength), light = StormLighting.SkyFactor(strength);
+            float blend = (float)StormModel.Smooth(strength), light = StormLighting.SkyFactor(StormRunner.LightingStrength);
             if (index == 0)
             {
                 // Matched world fog supplies the dust. Do not compress the native
@@ -98,7 +103,7 @@ namespace ApocaDustStorm
         }
         private static Color ChangeColor(Color native, float strength)
         {
-            float blend = (float)StormModel.Smooth(strength) * 0.9f;
+            float blend = (float)StormModel.Smooth(Mathf.Max(strength, StormRunner.PaletteStrength)) * 0.9f;
             float brightness = Mathf.Max(native.r, Mathf.Max(native.g, native.b));
             Color dust = StormFog.Sand * (brightness * 1.2f); dust.a = native.a;
             return Color.Lerp(native, dust, blend);

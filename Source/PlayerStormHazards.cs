@@ -6,6 +6,7 @@ namespace ApocaDustStorm
     internal static class PlayerStormHazards
     {
         private static readonly VehicleProtectionModel cover = new VehicleProtectionModel();
+        private static readonly DamageGraceModel grace = new DamageGraceModel();
         private static bool wasSleeping;
         private static GameObject player;
         private static PlayMakerFSM health, inCar, sleepFsm;
@@ -63,6 +64,7 @@ namespace ApocaDustStorm
                 checkingShelter = true;
             }
             else { checkingShelter = false; Sheltered = false; nextShelterScan = 0; }
+            if (Sheltered || !storm) grace.Reset();
             if (Sleeping)
             {
                 wasSleeping = true;
@@ -77,7 +79,8 @@ namespace ApocaDustStorm
             {
                 bool hazardous = State(strength) != StormCover.None;
                 cover.Step(dt, hazardous, Sheltered, InVehicle);
-                damage = (float)StormHazardModel.Damage(dt, strength, Sheltered, InVehicle, Plugin.Value(Plugin.ExposureDamage, 1), cover.Protection);
+                double damageTime = grace.DamageSeconds(dt, hazardous, Sheltered, storm, Plugin.Value(Plugin.DamageGrace, 0));
+                damage = (float)StormHazardModel.Damage(damageTime, strength, Sheltered, InVehicle, Plugin.Value(Plugin.ExposureDamage, 1), cover.Protection);
             }
             if (damage > 0)
             {
@@ -102,6 +105,6 @@ namespace ApocaDustStorm
             return (float)StormHazardModel.MovementGain(strength, gust, Plugin.Value(Plugin.Gusts, 1), Plugin.Value(Plugin.MovementResistance, 1));
         }
         internal static void Suspend() { suspended = true; checkingShelter = false; nextShelterScan = 0; StormHealthFlash.Clear(); }
-        internal static void Reset() { Suspend(); cover.Reset(); wasSleeping = false; shelterPosition = Vector3.zero; Sheltered = false; InVehicle = false; player = null; health = null; inCar = null; sleepFsm = null; amount = null; }
+        internal static void Reset() { Suspend(); cover.Reset(); grace.Reset(); wasSleeping = false; shelterPosition = Vector3.zero; Sheltered = false; InVehicle = false; player = null; health = null; inCar = null; sleepFsm = null; amount = null; }
     }
 }

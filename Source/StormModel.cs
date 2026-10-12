@@ -4,17 +4,18 @@ namespace ApocaDustStorm
 {
     // Names specify where wind comes FROM, rather than where it travels.
     internal enum WindFrom { North, South, East, West }
-    // One weather lifecycle covers the entire world. The fixed visual front is
-    // only an arrival cue; position never gates fog, lighting, wind or duration.
+    // A world-spanning front travels downwind; there are no circular regions or
+    // lateral weather boundaries. Local haze arrives with the visible dust wall.
     internal sealed class StormModel
     {
         internal bool Active { get; private set; }
         internal double Age, Duration, BuildTime, ClearTime, Speed, OriginX, OriginZ, WindX, WindZ;
         internal double PrevailingX, PrevailingZ;
         internal WindFrom Source { get; private set; }
-        private double phase, baseAngle, stopping = -1, stopStrength;
+        private double phase, baseAngle, stopping = -1, stopStrength, stoppedAge;
         internal const double ManualClearTime = 30;
-        internal double Front { get { return -1800 + Speed * Age; } }
+        internal double Front { get { return -1800 + Speed * (stopping >= 0 ? stoppedAge : Age); } }
+        internal double Envelope { get { return EnvelopeAfter(0); } }
         internal double Remaining { get { return Active ? Math.Max(0, Duration - Age) : 0; } }
         internal double AvailableSeconds { get { return !Active ? 0 : (stopping >= 0 ? Math.Max(0, ManualClearTime - stopping) : Remaining); } }
         internal void BeginFrom(double x, double z, WindFrom source, double duration, double buildTime, double clearTime, double seed)
@@ -45,7 +46,7 @@ namespace ApocaDustStorm
         internal void Stop()
         {
             if (!Active || stopping >= 0) return;
-            stopStrength = Intensity(0, 0); stopping = 0;
+            stopStrength = EnvelopeAfter(0); stoppedAge = Age; stopping = 0;
         }
         internal void Reset() { Active = false; Age = 0; stopping = -1; }
         private void UpdateWind()
@@ -55,20 +56,38 @@ namespace ApocaDustStorm
             double veer = Smooth(Age / 10) * (0.20 * Math.Sin(Age * 0.027 + phase) + 0.08 * Math.Sin(Age * 0.061 + phase * 0.41));
             WindX = Math.Cos(baseAngle + veer); WindZ = Math.Sin(baseAngle + veer);
         }
-        private double Lifecycle()
+        internal double SignedDistance(double x, double z)
+        { return SignedAfter(x, z, 0); }
+        private double SignedAfter(double x, double z, double ahead)
         {
-            if (stopping >= 0) return stopStrength * (1 - Smooth(stopping / ManualClearTime));
-            return Smooth(Age / BuildTime) * Smooth((Duration - Age) / ClearTime);
+            double dx = x - OriginX, dz = z - OriginZ;
+            double side = -PrevailingZ * dx + PrevailingX * dz;
+            double age = stopping >= 0 ? stoppedAge : Age + ahead;
+            return dx * PrevailingX + dz * PrevailingZ - (-1800 + Speed * age) - HaboobMath.Edge(side, age);
+        }
+        internal void ShiftOrigin(double x, double z)
+        {
+            if (double.IsNaN(x) || double.IsNaN(z) || double.IsInfinity(x) || double.IsInfinity(z)) return;
+            OriginX += x; OriginZ += z;
         }
         internal double Intensity(double x, double z)
-        { return IntensityAfter(0); }
-        internal double IntensityAfter(double ahead)
+        { return IntensityAfter(x, z, 0); }
+        internal double IntensityAfter(double ahead) { return IntensityAfter(OriginX, OriginZ, ahead); }
+        internal double IntensityAfter(double x, double z, double ahead)
+        {
+            if (double.IsNaN(x) || double.IsInfinity(x) || double.IsNaN(z) || double.IsInfinity(z)) return 0;
+            double envelope = EnvelopeAfter(ahead);
+            if (envelope <= 0) return 0;
+            // Very light advance dust, then a continuous handoff through the
+            // leading edge. Behind the front the existing peak/clearing remains.
+            return envelope * (0.025 + 0.975 * HaboobMath.Arrival(SignedAfter(x, z, ahead)));
+        }
+        private double EnvelopeAfter(double ahead)
         {
             if (!Active || ahead < 0 || double.IsNaN(ahead) || double.IsInfinity(ahead) || ahead >= AvailableSeconds) return 0;
             if (stopping >= 0) return stopStrength * (1 - Smooth((stopping + ahead) / ManualClearTime));
             double age = Age + ahead;
-            // Heavy weather persists everywhere; subtle slow breathing cannot
-            // create clear holes or jump when driving/teleporting across the map.
+            // Heavy weather behind the front breathes slowly without clear holes.
             double pulse = 0.97 + 0.02 * Math.Sin(age * 0.03 + phase)
                                 + 0.01 * Math.Sin(age * 0.07 - phase * 0.41);
             return Unit(pulse * Smooth(age / BuildTime) * Smooth((Duration - age) / ClearTime));
@@ -76,7 +95,7 @@ namespace ApocaDustStorm
         internal double FrontOpacity(double x, double z)
         {
             if (!Active) return 0;
-            return Smooth(Age / 12) * (1 - Smooth((Age - BuildTime * 0.8) / (BuildTime * 0.4)))
+            return Smooth(Age / 8) * Smooth((Duration - Age) / ClearTime)
                 * (stopping >= 0 ? 1 - Smooth(stopping / ManualClearTime) : 1);
         }
         internal double Gust(double x, double z)

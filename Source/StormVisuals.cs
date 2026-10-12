@@ -4,24 +4,31 @@ using UnityEngine.Rendering;
 
 namespace ApocaDustStorm
 {
-    internal sealed class StormVisuals : IDisposable
+    internal sealed class StormVisuals : IDisposable, IDustPickupWorld
     {
         private readonly GameObject root;
-        private readonly ParticleSystem dust, ground, front;
+        private readonly ParticleSystem dust, ground;
+        private readonly HaboobWall wall;
+        private readonly StormTerrainSampler frontGround = new StormTerrainSampler();
+        private readonly StormNearDust nearDust;
+        private readonly StormBillows billows;
+        private readonly StormLightScatter scatter;
         private readonly Texture2D texture;
         private readonly Material particles, wood;
         private readonly Mesh branch;
         private readonly StormDebris debris;
         private readonly RaycastHit[] hits = new RaycastHit[24];
-        private readonly ParticleSystem.Particle[] airborne = new ParticleSystem.Particle[800], scud = new ParticleSystem.Particle[280];
-        private sealed class SourcePatch { internal Vector3 Center; internal float Life, Radius; }
-        private readonly SourcePatch[] patches = new SourcePatch[12];
+        private readonly ParticleSystem.Particle[] airborne = new ParticleSystem.Particle[560], scud = new ParticleSystem.Particle[196];
+        private readonly DustOccupancy airborneOccupancy = new DustOccupancy(3), scudOccupancy = new DustOccupancy(2);
         private readonly System.Random random = new System.Random();
+        private readonly DustPickupSources sources;
+        private float retireDistance;
         private float nextBatch, dustBudget, groundBudget, flowClock;
         private Vector3 lastCamera;
         private bool hasCamera;
         internal StormVisuals()
         {
+            sources = new DustPickupSources(random);
             root = new GameObject("ApocaDustStorm.Visuals"); root.hideFlags = HideFlags.HideAndDontSave;
             // Construct in a try block so a stripped shader cannot leak half-built objects.
             try
@@ -29,11 +36,18 @@ namespace ApocaDustStorm
                 texture = StormAssets.DustTexture(); particles = StormAssets.ParticleMaterial(texture);
                 wood = StormAssets.WoodMaterial();
                 branch = StormAssets.Branch();
-                dust = Create("Lifting dust", 800, particles, null, 0);
-                ground = Create("Ground dust", 280, particles, null, 0);
-                front = Create("Approaching dust front", 64, particles, null, 0);
+                dust = Create("Lifting dust", airborne.Length, particles, null, 0);
+                ground = Create("Ground dust", scud.Length, particles, null, 0);
+                try { wall = new HaboobWall(root.transform); }
+                catch (Exception e) { Plugin.Log.LogWarning("Dust wall unavailable; retaining local dust and haze: " + e.Message); }
+                try { nearDust = new StormNearDust(root.transform, texture); }
+                catch (Exception e) { Plugin.Log.LogWarning("Near dust unavailable: " + e.Message); }
+                try { billows = new StormBillows(root.transform); }
+                catch (Exception e) { Plugin.Log.LogWarning("Animated billows unavailable: " + e.Message); }
+                try { scatter = new StormLightScatter(root.transform); }
+                catch (Exception e) { Plugin.Log.LogWarning("Dust light scatter unavailable: " + e.Message); }
                 debris = new StormDebris(root, wood, branch);
-                Plugin.Log.LogInfo("Dust systems ready: ground pickup, rising downwind plumes and collision-aware twigs/sticks; no debris damage callbacks.");
+                Plugin.Log.LogInfo("Dust systems ready: ground pickup, rising downwind plumes and cosmetic windblown twigs/sticks; no debris damage callbacks.");
             }
             catch { Dispose(); throw; }
         }
@@ -85,7 +99,7 @@ namespace ApocaDustStorm
             ps.Play(); return ps;
         }
         private float Range(float min, float max) { return min + (float)random.NextDouble() * (max - min); }
-        private bool Ground(Vector3 location, out Vector3 point)
+        public bool Ground(Vector3 location, out Vector3 point)
         {
             // Ground dust originates on terrain, rather than a moving car/player/loose part.
             int n = Physics.RaycastNonAlloc(location + Vector3.up * 100, Vector3.down, hits, 250, ~0, QueryTriggerInteraction.Ignore);
@@ -98,7 +112,7 @@ namespace ApocaDustStorm
             }
             return found;
         }
-        private bool OpenSky(Vector3 point)
+        public bool OpenSky(Vector3 point)
         { return !Physics.Raycast(point + Vector3.up * 1.5f, Vector3.up, 25, ~0, QueryTriggerInteraction.Ignore); }
         private void Emit(ParticleSystem ps, Vector3 position, Vector3 velocity, float size, float life, Color color)
         {
@@ -106,47 +120,31 @@ namespace ApocaDustStorm
             p.position = position; p.velocity = velocity; p.startSize = size; p.startLifetime = life; p.startColor = color;
             p.rotation3D = new Vector3(Range(0, 360), Range(0, 360), Range(0, 360)); ps.Emit(p, 1);
         }
-        private bool Pickup(Vector3 camera, Vector3 wind, Vector3 cross, out Vector3 point)
-        {
-            int index = random.Next(patches.Length);
-            SourcePatch patch = patches[index];
-            if (patch == null) { patch = new SourcePatch(); patches[index] = patch; }
-            if (patch.Life <= 0 || Vector3.Distance(patch.Center, camera) > 70)
-            {
-                // Thick distance haze hides far-away particles. Keep most pickup
-                // patches close enough to read their drifting motion, with a
-                // smaller background population for depth. This is only cosmetic
-                // source placement; it does not create a clear weather bubble.
-                bool near = random.NextDouble() < 0.7;
-                Vector3 candidate = camera - wind * (near ? Range(4, 26) : Range(22, 52))
-                    + cross * (near ? Range(-20, 20) : Range(-32, 32)), surface;
-                if (!Ground(candidate, out surface) || !OpenSky(surface)) { point = Vector3.zero; return false; }
-                patch.Center = surface; patch.Radius = Range(1.2f, 4.2f); patch.Life = Range(2.5f, 6);
-            }
-            // Resample the small offset so plumes originate on the actual local slope.
-            Vector3 sample = patch.Center + wind * Range(-patch.Radius, patch.Radius) + cross * Range(-patch.Radius, patch.Radius);
-            if (!Ground(sample, out point) || !OpenSky(point)) return false;
-            return true;
-        }
-        private void Advect(ParticleSystem ps, ParticleSystem.Particle[] buffer, float dt, StormModel model, float speed, float gust, bool low)
+        private void Advect(ParticleSystem ps, ParticleSystem.Particle[] buffer, DustOccupancy occupancy, float dt, StormModel model, float speed, float gust, bool low)
         {
             int count = ps.GetParticles(buffer); float blend = (float)DustMotion.Blend(dt);
+            occupancy.Begin(lastCamera);
+            int kept = 0;
             for (int i = 0; i < count; i++)
             {
                 ParticleSystem.Particle p = buffer[i];
+                if (DustVisibility.Hidden(p.position, lastCamera, p.startSize, retireDistance)) continue;
                 DustFlow flow = DustMotion.Flow(p.startLifetime - p.remainingLifetime, p.startLifetime,
                     (p.randomSeed % 10000) * 0.0127, model.WindX, model.WindZ, speed, gust, low);
                 p.velocity = Vector3.Lerp(p.velocity, new Vector3((float)flow.X, (float)flow.Y, (float)flow.Z), blend);
-                buffer[i] = p;
+                occupancy.Observe(p.position);
+                buffer[kept++] = p;
             }
-            ps.SetParticles(buffer, count);
+            if (count > 0) ps.SetParticles(buffer, kept);
         }
         internal void Tick(Vector3 camera, float dt, float strength, StormModel model)
         {
             if (hasCamera && Vector3.Distance(lastCamera, camera) > 250)
             {
-                dust.Clear(); ground.Clear(); front.Clear(); debris.Clear();
-                foreach (SourcePatch patch in patches) if (patch != null) patch.Life = 0;
+                dust.Clear(); ground.Clear(); debris.Clear();
+                sources.Clear();
+                airborneOccupancy.Begin(camera); scudOccupancy.Begin(camera);
+                dustBudget = groundBudget = 0;
             }
             lastCamera = camera; hasCamera = true;
             Vector3 wind = new Vector3((float)model.WindX, 0, (float)model.WindZ);
@@ -154,61 +152,70 @@ namespace ApocaDustStorm
             float gust = StormRunner.Gust;
             float speed = (float)WindMath.Speed(gust, Plugin.Value(Plugin.Gusts, 1));
             float amount = Plugin.Value(Plugin.Dust, 1);
+            retireDistance = DustVisibility.RetireDistance(strength, Plugin.StormVisibility, gust, Plugin.Value(Plugin.Gusts, 1));
             // Wind targets change slowly; update at 20 Hz rather than processing every
             // particle every rendered frame. Unity still integrates/render them each frame.
             flowClock += dt;
             if (flowClock >= 0.05f)
             {
-                Advect(dust, airborne, flowClock, model, speed, gust, false); Advect(ground, scud, flowClock, model, speed, gust, true);
+                Advect(dust, airborne, airborneOccupancy, flowClock, model, speed, gust, false);
+                Advect(ground, scud, scudOccupancy, flowClock, model, speed, gust, true);
                 flowClock = 0;
             }
-            foreach (SourcePatch patch in patches) if (patch != null) patch.Life -= dt;
+            sources.Advance(dt);
             debris.Tick(camera, dt, strength, gust, model);
+            if (wall != null) wall.Tick(camera, dt, strength, model, frontGround);
+            if (nearDust != null) nearDust.Tick(camera, dt, strength, gust, model, StormRunner.Entered);
+            if (billows != null) billows.Tick(camera, dt, strength, gust, model, StormRunner.Entered);
+            if (scatter != null) scatter.Tick(camera, dt, strength);
             nextBatch -= dt; if (nextBatch > 0) return;
             float step = Mathf.Clamp(0.1f - nextBatch, 0.1f, 0.3f); nextBatch = 0.1f;
+            sources.BeginBatch();
             Color nativeFog = RenderSettings.fogColor;
             float light = Mathf.Clamp(Mathf.Max(nativeFog.r, Mathf.Max(nativeFog.g, nativeFog.b)) * 1.5f, 0.12f, 1)
                 * StormLighting.SkyFactor(strength);
             Color sand = StormFog.Sand * light;
             float pickup = (float)DustMotion.Pickup(WindMath.Gain(gust, Plugin.Value(Plugin.Gusts, 1)));
-            dustBudget = Mathf.Min(24, dustBudget + 92 * amount * strength * pickup * step);
-            groundBudget = Mathf.Min(12, groundBudget + 26 * amount * strength * pickup * step);
+            // Do not query ground/shelter for particles a full system cannot accept.
+            // Discard overflow rather than releasing a catch-up burst as slots free.
+            dustBudget = DustEmissionBudget.Add(dustBudget, 64 * amount * strength * pickup, step, dust.particleCount, airborne.Length, 24);
+            groundBudget = DustEmissionBudget.Add(groundBudget, 18 * amount * strength * pickup, step, ground.particleCount, scud.Length, 12);
             while (dustBudget >= 1)
             {
                 dustBudget--;
-                Vector3 surface; if (!Pickup(camera, wind, cross, out surface)) continue;
+                Vector3 surface; if (!sources.TryGet(camera, wind, cross, this, out surface)) continue;
+                if (DustVisibility.Hidden(surface, camera, 14, retireDistance) || !airborneOccupancy.TryReserve(surface)) continue;
                 Color plume = sand * Range(0.92f, 1.12f); plume.a = Range(0.22f, 0.28f);
                 Emit(dust, surface + Vector3.up * Range(0.18f, 0.4f), wind * (speed * 0.12f) + Vector3.up * Range(1.3f, 2.1f), Range(7, 14), Range(6, 10), plume);
             }
             while (groundBudget >= 1)
             {
                 groundBudget--;
-                Vector3 surface; if (!Pickup(camera, wind, cross, out surface)) continue;
+                Vector3 surface; if (!sources.TryGet(camera, wind, cross, this, out surface)) continue;
+                if (DustVisibility.Hidden(surface, camera, 10, retireDistance) || !scudOccupancy.TryReserve(surface)) continue;
                 Color scudColor = sand * Range(0.90f, 1.08f); scudColor.a = Range(0.28f, 0.35f);
                 Emit(ground, surface + Vector3.up * Range(0.15f, 0.3f), wind * (speed * 0.24f) + Vector3.up * 0.05f, Range(4, 10), Range(3, 6), scudColor);
             }
-            // A distant moving wall makes the approaching storm visible before local fog arrives.
-            Vector3 heading = new Vector3((float)model.PrevailingX, 0, (float)model.PrevailingZ);
-            Vector3 frontCross = new Vector3(-heading.z, 0, heading.x);
-            Vector3 edge = new Vector3((float)model.OriginX, camera.y, (float)model.OriginZ) + heading * (float)model.Front;
-            float signed = Vector3.Dot(camera - edge, heading);
-            if (Mathf.Abs(signed) < 1800 && amount > 0)
-            {
-                float side = Vector3.Dot(camera - edge, frontCross);
-                for (int i = 0; i < 1; i++)
-                {
-                    Vector3 p = edge + frontCross * (side + Range(-900, 900)) + heading * Range(-100, 50), surface;
-                    float opacity = (float)model.FrontOpacity(p.x, p.z); if (opacity < 0.02f) continue;
-                    if (!Ground(p, out surface)) continue;
-                    float approach = (float)StormModel.Smooth((Mathf.Abs(signed) - 150) / 250);
-                    Color wall = StormFog.Sand * light; wall.a = 0.22f * opacity * amount * approach;
-                    Emit(front, surface + Vector3.up * Range(35, 110), heading * (float)model.Speed, Range(110, 220), Range(5, 8), wall);
-                }
-            }
+        }
+        internal void PreCullWall(Camera camera) { if (wall != null) wall.PreCull(camera); if (nearDust != null) nearDust.PreCull(camera); if (billows != null) billows.PreCull(camera); if (scatter != null) scatter.PreCull(camera); }
+        internal void HideWall() { if (wall != null) wall.Hide(); if (nearDust != null) nearDust.Hide(); if (billows != null) billows.Hide(); if (scatter != null) scatter.Hide(); }
+        internal void ShiftOrigin(Vector3 delta)
+        {
+            lastCamera += delta;
+            dust.Clear(); ground.Clear(); debris.Clear(); sources.Clear();
+            airborneOccupancy.Begin(lastCamera); scudOccupancy.Begin(lastCamera); dustBudget = groundBudget = 0;
+            if (wall != null) wall.ShiftOrigin(delta); frontGround.Reset();
+            if (nearDust != null) nearDust.Clear();
+            if (billows != null) billows.Clear();
+            if (scatter != null) scatter.ShiftOrigin(delta);
         }
         internal void FixedTick(float strength, float gust, StormModel model) { debris.FixedTick(gust, model); }
         public void Dispose()
         {
+            if (wall != null) wall.Dispose();
+            if (nearDust != null) nearDust.Dispose();
+            if (billows != null) billows.Dispose();
+            if (scatter != null) scatter.Dispose();
             if (root != null) UnityEngine.Object.Destroy(root);
             if (texture != null) UnityEngine.Object.Destroy(texture);
             if (particles != null) UnityEngine.Object.Destroy(particles);

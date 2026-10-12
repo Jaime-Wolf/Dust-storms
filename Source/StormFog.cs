@@ -10,10 +10,11 @@ namespace ApocaDustStorm
     internal static class StormFog
     {
         internal static readonly Color Sand = new Color(0.54f, 0.43f, 0.29f, 1);
+        internal static readonly Color NightSand = new Color(0.32f, 0.215f, 0.12f, 1);
         private sealed class Snapshot
         {
             internal Camera Camera;
-            internal bool Enabled;
+            internal bool Enabled, NightOnly;
             internal FogMode Mode;
             internal float Density, Start, End, EnviroDistance, EnviroMax;
             internal Color Color;
@@ -33,7 +34,11 @@ namespace ApocaDustStorm
             float light = Mathf.Max(native.r, Mathf.Max(native.g, native.b));
             float sky = Mathf.Lerp(StormLighting.SkyFactor(strength), StormLighting.SkyFactor(1),
                 (float)HorizonMath.NightBlend(strength, night));
-            Color sand = Sand * Mathf.Clamp(light * 1.5f, 0.12f, 1) * sky; sand.a = 1;
+            float dayLight = Mathf.Clamp(light * 1.5f, 0.12f, 1);
+            // Night haze has its own warm brown palette. Native fog RGB may be
+            // white or nearly black; neither should wash out or erase its colour.
+            // This tints fog only, without changing world-light intensities.
+            Color sand = Color.Lerp(Sand * dayLight, NightSand, Mathf.Clamp01(night)) * sky; sand.a = 1;
             return sand;
         }
         internal static Vector4 NightWeather(Vector4 native, Color dust, float strength, float night)
@@ -55,10 +60,37 @@ namespace ApocaDustStorm
             return new Vector4((native.x * a + dust.r * b) / weight,
                 (native.y * a + dust.g * b) / weight, (native.z * a + dust.b * b) / weight, weight);
         }
+        internal static float EffectiveDensity(bool enabled, FogMode mode, float density, float start, float end, float strength, float gust)
+        {
+            float target = (float)(StormModel.FogDensity(strength * strength, Plugin.StormVisibility) * WindMath.Haze(gust, Plugin.Value(Plugin.Gusts, 1)));
+            float baseline = density;
+            if (mode == FogMode.Linear) baseline = -Mathf.Log(Mathf.Clamp01((end - 100) / Mathf.Max(1, end - start)) + 0.00001f) / 100;
+            else if (mode == FogMode.ExponentialSquared) baseline = density * density * 100;
+            return Mathf.Max(enabled ? Mathf.Max(0, baseline) : 0, target);
+        }
         internal static bool Push(Camera camera, Material azureMaterial = null)
         {
-            if (!StormRunner.CanRender || camera == null || camera != StormRunner.View || StormRunner.Strength < 0.001f) return false;
+            if (!StormRunner.CanRender || camera == null || camera != StormRunner.View) return false;
+            float night = NativeStormClock.NightStrength;
+            bool nightOnly=StormRunner.Strength<0.001f;
+            if (nightOnly && night<=0) return false;
             Snapshot s = pool.Count > 0 ? pool.Pop() : new Snapshot();
+            s.Camera=camera; s.NightOnly=nightOnly;
+            s.Color=RenderSettings.fogColor; s.Weather=Shader.GetGlobalVector("_weatherFogMod");
+            if (nightOnly)
+            {
+                stack.Push(s);
+                try
+                {
+                    if (stack.Count==1)
+                    {
+                        RenderSettings.fogColor=NightFogColours.Colour(s.Color,night);
+                        Shader.SetGlobalVector("_weatherFogMod",NightFogColours.Weather(s.Weather,night));
+                    }
+                    return true;
+                }
+                catch { Pop(); throw; }
+            }
             s.Camera = camera; s.Enabled = RenderSettings.fog; s.Mode = RenderSettings.fogMode;
             s.Density = RenderSettings.fogDensity; s.Start = RenderSettings.fogStartDistance; s.End = RenderSettings.fogEndDistance;
             s.Color = RenderSettings.fogColor; s.Weather = Shader.GetGlobalVector("_weatherFogMod");
@@ -79,24 +111,21 @@ namespace ApocaDustStorm
             if (outer && (Plugin.Value(Plugin.Darkness, 1) > 0 || Plugin.Value(Plugin.Headlights, 1) > 0))
             {
                 if (s.Lighting == null) s.Lighting = new StormLighting.Snapshot(); else s.Lighting.Capture();
-                s.LightingApplied = true; s.Lighting.Apply(strength);
+                s.LightingApplied = true; s.Lighting.Apply(StormRunner.LightingStrength);
             }
             if (s.Azure == null) s.Azure = new AzureAtmosphere.Snapshot(azureMaterial); else s.Azure.Capture(azureMaterial);
             s.AzureApplied = true; s.Azure.Apply(strength);
             float gust = (float)StormRunner.Gust;
-            float target = (float)(StormModel.FogDensity(strength * strength, Plugin.StormVisibility) * WindMath.Haze(gust, Plugin.Value(Plugin.Gusts, 1)));
-            // Match the current native fog's attenuation at 100m before adding dust.
-            float baseline = s.Density;
-            if (s.Mode == FogMode.Linear) baseline = -Mathf.Log(Mathf.Clamp01((s.End - 100) / Mathf.Max(1, s.End - s.Start)) + 0.00001f) / 100;
-            else if (s.Mode == FogMode.ExponentialSquared) baseline = s.Density * s.Density * 100;
+            float densityTarget = EffectiveDensity(s.Enabled, s.Mode, s.Density, s.Start, s.End, strength, gust);
             RenderSettings.fog = true; RenderSettings.fogMode = FogMode.Exponential;
-            RenderSettings.fogDensity = Mathf.Max(s.Enabled ? Mathf.Max(0, baseline) : 0, target);
+            RenderSettings.fogDensity = densityTarget;
             // White native fog is a daytime setting, not a measure of current
             // night light. Correct its colour before distance dust reveals it.
-            float night = NativeStormClock.NightStrength;
-            Color sand = DustColour(s.Color, strength, night);
-            RenderSettings.fogColor = Color.Lerp(s.Color, sand, (float)HorizonMath.ColourBlend(strength, night) * 0.95f);
-            Shader.SetGlobalVector("_weatherFogMod", BlendWeather(NightWeather(s.Weather, sand, strength, night), sand, 0.95f, blend));
+            Color sand = DustColour(s.Color, StormRunner.LightingStrength, night);
+            // Retain the accepted daytime mix; at night, fully replace stale
+            // white RGB once the handoff completes instead of retaining 5% white.
+            RenderSettings.fogColor = Color.Lerp(NightFogColours.Colour(s.Color,night), sand, (float)HorizonMath.ColourBlend(Mathf.Max(strength, StormRunner.PaletteStrength), night) * Mathf.Lerp(0.95f, 1, night));
+            Shader.SetGlobalVector("_weatherFogMod", BlendWeather(NightWeather(NightFogColours.Weather(s.Weather,night), sand, strength, night), sand, 0.95f, blend));
             Shader.SetGlobalFloat("_distanceFogIntensity", Mathf.Lerp(s.EnviroDistance, Mathf.Max(s.EnviroDistance, 1), blend));
             // Enviro's shader stores ONE MINUS maximum density (verified in SetMaterialsVariables).
             Shader.SetGlobalFloat("_maximumFogDensity", Mathf.Lerp(s.EnviroMax, Mathf.Min(s.EnviroMax, 0.005f), blend));
@@ -118,6 +147,11 @@ namespace ApocaDustStorm
         {
             if (stack.Count == 0) return;
             Snapshot s = stack.Pop();
+            if (s.NightOnly)
+            {
+                RenderSettings.fogColor=s.Color; Shader.SetGlobalVector("_weatherFogMod",s.Weather);
+                s.Camera=null; pool.Push(s); return;
+            }
             if (s.LightingApplied) s.Lighting.Restore();
             if (s.AzureApplied) s.Azure.Restore();
             if (s.Settings != null) s.Settings.startDistance = s.NativeStart;
@@ -129,8 +163,8 @@ namespace ApocaDustStorm
             Shader.SetGlobalVector("_HeightParams", s.HeightParams); Shader.SetGlobalVector("_DistanceParams", s.DistanceParams);
             s.Camera = null; pool.Push(s);
         }
-        internal static void PreCull(Camera camera) { StormView.Capture(camera); Push(camera); StormHorizon.PreCull(camera); DustLightning.PreCull(camera); WindblownLizards.PreCull(camera); }
-        internal static void PostRender(Camera camera) { DustLightning.Hide(); StormHorizon.Hide(); if (stack.Count > 0 && stack.Peek().Camera == camera) Pop(); }
+        internal static void PreCull(Camera camera) { StormEntryShake.PreCull(camera); StormView.Capture(camera); StormDistanceFog.PreCull(camera); Push(camera); StormHorizon.PreCull(camera); DustLightning.PreCull(camera); WindblownLizards.PreCull(camera); }
+        internal static void PostRender(Camera camera) { DustLightning.Hide(); StormHorizon.Hide(); if (stack.Count > 0 && stack.Peek().Camera == camera) Pop(); StormEntryShake.PostRender(camera); }
         internal static void Restore() { while (stack.Count > 0) Pop(); }
         internal static void Clear() { Restore(); pool.Clear(); }
         internal static void FinishPass(bool pushed) { if (pushed) Pop(); }
